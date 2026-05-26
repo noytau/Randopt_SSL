@@ -1,0 +1,39 @@
+# ─── Quick Dev Config ────────────────────────────────────────────────────────
+# Very small samples for debugging the pipeline end-to-end.
+# Usage: python -m scripts.run --config configs/dev_quick.yaml
+
+model: data2vec_audio
+task: asr
+
+task_config:
+  librispeech_subset: clean
+  train_split: "train.100"
+  max_train_samples: 100       # tiny!
+  max_val_samples: 50
+  max_test_samples: 50
+  batch_size: 2
+  num_workers: 0
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+# Fast head training
+head_lr: 0.001
+head_epochs: 2
+
+# Fast fine-tuning
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 1
+
+# Fast RandOpt
+sigma: 0.01
+n_candidates: 5
+top_k: 2
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dev_quick

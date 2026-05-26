@@ -1,0 +1,44 @@
+# ─── Base Config ────────────────────────────────────────────────────────────
+# Override any field via CLI: --sigma 0.005 --n_candidates 200
+
+# ── Model ──
+model: data2vec_audio
+
+# ── Task ──
+task: asr
+task_config:
+  librispeech_subset: clean
+  train_split: "train.100"     # use 100h subset for speed
+  max_train_samples: 5000      # further subsample for dev runs (null = use all)
+  max_val_samples: 500
+  max_test_samples: 1000
+  batch_size: 4
+  num_workers: 2
+
+# ── Methods to run ──
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+# ── Linear Probe config ──
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+# ── Fine-tuning config ──
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+# ── RandOpt config ──
+sigma: 0.01
+n_candidates: 50
+top_k: 5
+n_rounds: 1
+
+# ── General ──
+seed: 42
+device: auto    # auto, cpu, cuda, cuda:0, etc.
+output_dir: results/data2vec_asr

@@ -1,0 +1,40 @@
+# BERT-Large × RTE (Recognizing Textual Entailment)
+# Binary classification: entailment vs. not-entailment
+# Headline result: RandOpt stability on small datasets (only 2,490 train pairs)
+
+model: bert_large
+task: rte
+
+task_config:
+  max_length: 128
+  max_train_samples: null        # use all 2,490
+  max_val_samples: null          # use all 277 val
+  max_test_samples: null
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+# Linear Probe config
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+# Fine-tuning config (very small lr to avoid CF on small dataset)
+lr_encoder: 0.000005
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+# RandOpt config
+sigma: 0.005
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/bert_rte

@@ -1,0 +1,30 @@
+# Quick dev config: DINOv2 × CIFAR-100 (ImageNet proxy) — tiny data (~3 min)
+model: dinov2
+task: imagenet_cls
+
+task_config:
+  use_cifar100_fallback: true
+  max_train_samples: 100
+  max_val_samples: 50
+  max_test_samples: 50
+  batch_size: 4
+  num_workers: 0
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 2
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 1
+sigma: 0.01
+n_candidates: 5
+top_k: 2
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dev_quick_dinov2

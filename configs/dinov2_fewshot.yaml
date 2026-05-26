@@ -1,0 +1,38 @@
+# DINOv2 ViT-L × 5-way 5-shot Few-shot Classification (CIFAR-100)
+# Non-differentiable nearest-centroid metric → RandOpt structural advantage
+
+model: dinov2
+task: fewshot_cls
+
+task_config:
+  n_way: 5
+  n_shot: 5
+  n_query: 15
+  n_episodes: 200               # more episodes = more reliable estimate
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+# linear_probe: warms up a linear head (mostly no-op for few-shot)
+head_lr: 0.001
+head_epochs: 5
+
+# finetune: encoder gets updated, which may help or hurt few-shot
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+# RandOpt: directly optimizes episode accuracy — non-differentiable fitness!
+sigma: 0.003
+n_candidates: 50
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dinov2_fewshot

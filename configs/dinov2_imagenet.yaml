@@ -1,0 +1,36 @@
+# DINOv2 ViT-L × ImageNet/CIFAR-100 classification
+# use_cifar100_fallback: true → uses CIFAR-100 (100 classes) as ImageNet proxy
+
+model: dinov2
+task: imagenet_cls
+
+task_config:
+  use_cifar100_fallback: true    # set false if you have ImageNet-1K HF access
+  max_train_samples: 5000        # subsample for speed; null = all 50K
+  max_val_samples: 1000
+  max_test_samples: 1000
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+sigma: 0.005
+n_candidates: 50
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dinov2_imagenet

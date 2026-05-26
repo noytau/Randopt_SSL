@@ -1,0 +1,37 @@
+# BERT-Large × MNLI (Multi-Genre NLI)
+# 3-class: entailment / neutral / contradiction
+# 393K train pairs — large dataset, finetune should dominate
+
+model: bert_large
+task: mnli
+
+task_config:
+  max_length: 128
+  max_train_samples: 10000       # subsample for faster experiments
+  max_val_samples: 2000
+  max_test_samples: 2000
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+sigma: 0.005
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/bert_mnli

@@ -1,0 +1,38 @@
+# BERT-Large × CoLA (Corpus of Linguistic Acceptability)
+# Binary acceptability + MCC metric (NON-DIFFERENTIABLE)
+# Key experiment: RandOpt optimizes MCC directly vs surrogate CE loss
+
+model: bert_large
+task: cola
+
+task_config:
+  max_length: 64
+  max_train_samples: null        # use all 8,551
+  max_val_samples: null          # use all 1,043 val
+  max_test_samples: null
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+# RandOpt with MCC as direct fitness — structural advantage!
+sigma: 0.005
+n_candidates: 100
+top_k: 5
+n_rounds: 2
+
+seed: 42
+device: auto
+output_dir: results/bert_cola
