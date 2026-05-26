@@ -36,6 +36,11 @@ def train_linear_head(
     head = task.build_head(model.hidden_dim(), device).to(device)
     metric_name, higher_is_better = task.primary_metric()
 
+    # Few-shot and similar tasks use Identity heads with no parameters — skip training.
+    if not list(head.parameters()):
+        logger.info("  Head has no trainable parameters, skipping head training.")
+        return head
+
     optimizer = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = task.get_loss_fn()
 

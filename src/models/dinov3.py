@@ -81,11 +81,10 @@ class DINOv2Model(SSLModel):
         """
         pixel_values = batch["pixel_values"].to(self._device)
 
-        with torch.no_grad():
-            outputs = self._model(
-                pixel_values=pixel_values,
-                output_hidden_states=False,
-            )
+        outputs = self._model(
+            pixel_values=pixel_values,
+            output_hidden_states=False,
+        )
 
         # last_hidden_state: [B, N+1, 1024] where index 0 = CLS
         if self._output_cls_only:

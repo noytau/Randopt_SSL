@@ -87,13 +87,12 @@ class BERTLargeModel(SSLModel):
         if token_type_ids is not None:
             token_type_ids = token_type_ids.to(self._device)
 
-        with torch.no_grad():
-            outputs = self._model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
-                output_hidden_states=False,
-            )
+        outputs = self._model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            output_hidden_states=False,
+        )
 
         if self._output_cls_only:
             # CLS token: [B, 1024] → reshape to [B, 1, 1024] for uniform interface

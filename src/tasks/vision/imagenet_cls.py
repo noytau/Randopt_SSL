@@ -274,7 +274,7 @@ class FewShotClassificationTask(Task):
     def get_loss_fn(self):
         """Dummy loss (few-shot doesn't train a head via gradient descent)."""
         def loss_fn(logits, batch):
-            return torch.tensor(0.0)
+            return (logits * 0.0).sum()  # differentiable zero; no params → no backprop
         return loss_fn
 
     def evaluate(

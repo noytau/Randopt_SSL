@@ -36,10 +36,13 @@ class Data2VecAudioModel(SSLModel):
         return "data2vec_audio"
 
     def load(self, device: torch.device) -> None:
-        from transformers import Data2VecAudioModel as HFModel, Wav2Vec2Processor
+        from transformers import Data2VecAudioModel as HFModel, Wav2Vec2FeatureExtractor
 
         logger.info(f"Loading {self._model_id}...")
-        self._processor = Wav2Vec2Processor.from_pretrained(self._model_id)
+        # Use FeatureExtractor only — the ASR task manages its own CTC vocab,
+        # so we don't need Wav2Vec2Processor (which requires a vocab file not
+        # present on the base SSL checkpoint).
+        self._processor = Wav2Vec2FeatureExtractor.from_pretrained(self._model_id)
         self._model = HFModel.from_pretrained(self._model_id)
         self._model.to(device)
         self._model.eval()
@@ -74,12 +77,11 @@ class Data2VecAudioModel(SSLModel):
         if attention_mask is not None:
             attention_mask = attention_mask.to(self._device)
 
-        with torch.no_grad():
-            outputs = self._model(
-                input_values=input_values,
-                attention_mask=attention_mask,
-                output_hidden_states=False,
-            )
+        outputs = self._model(
+            input_values=input_values,
+            attention_mask=attention_mask,
+            output_hidden_states=False,
+        )
         return outputs.last_hidden_state  # [B, S, 1024]
 
     def hidden_dim(self) -> int:
