@@ -1,0 +1,38 @@
+# BERT-Large × STS-B (Semantic Textual Similarity Benchmark)
+# Regression: predict sentence similarity score 0.0-5.0
+# Primary metric: Spearman ρ ↑
+
+model: bert_large
+
+task: stsb
+
+task_config:
+  max_length: 128
+  max_train_samples: null
+  max_val_samples: null
+  max_test_samples: null
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+sigma: 0.005
+n_candidates: 100
+top_k: 5
+n_rounds: 2
+
+seed: 42
+device: auto
+output_dir: results/bert_stsb

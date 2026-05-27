@@ -1,0 +1,38 @@
+# Dev-quick config for Segmentation (tiny data for pipeline testing)
+# IMPORTANT: DINOv2 must output all patch tokens (output_cls_only=False)
+
+model: dinov2
+model_config:
+  output_cls_only: false
+
+task: segmentation
+
+task_config:
+  max_train_samples: 30
+  max_val_samples: 10
+  max_test_samples: 10
+  batch_size: 4
+  num_workers: 0
+  img_size: 224
+  patch_size: 14
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 2
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 1
+
+sigma: 0.005
+n_candidates: 5
+top_k: 2
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dev_quick_segmentation

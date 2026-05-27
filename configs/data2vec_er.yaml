@@ -1,0 +1,37 @@
+# data2vec_audio × Emotion Recognition (CREMA-D)
+# 6-class emotion classification: anger, disgust, fear, happiness, neutral, sadness
+
+model: data2vec_audio
+task: emotion_recognition
+
+task_config:
+  hf_dataset_id: crema_d
+  n_classes: 6
+  max_train_samples: 5000
+  max_val_samples: 500
+  max_test_samples: 500
+  batch_size: 16
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+sigma: 0.01
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/data2vec_er

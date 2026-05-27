@@ -1,0 +1,36 @@
+# data2vec_audio × Speaker Identification (LibriSpeech clean)
+# Classify audio to speaker identity
+
+model: data2vec_audio
+task: speaker_id
+
+task_config:
+  librispeech_subset: clean
+  max_train_samples: 10000
+  max_val_samples: 2000
+  max_test_samples: 2000
+  batch_size: 16
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+sigma: 0.01
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/data2vec_sid

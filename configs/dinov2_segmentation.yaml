@@ -1,0 +1,43 @@
+# DINOv2 × Semantic Segmentation (ADE20K / scene_parse_150)
+# 150 semantic classes, mIoU metric (non-differentiable — RandOpt structural advantage!)
+#
+# IMPORTANT: DINOv2 must output all patch tokens (output_cls_only=False).
+# Set below in model_config. Also handled automatically in SegmentationTask.evaluate().
+
+model: dinov2
+model_config:
+  output_cls_only: false
+
+task: segmentation
+
+task_config:
+  max_train_samples: 5000
+  max_val_samples: 500
+  max_test_samples: 500
+  batch_size: 16
+  num_workers: 2
+  img_size: 224
+  patch_size: 14
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+sigma: 0.005
+n_candidates: 50
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dinov2_segmentation

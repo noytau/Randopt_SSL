@@ -1,0 +1,38 @@
+# data2vec_audio × Intent Classification (SUPERB IC / Fluent Speech Commands)
+# 31-class intent classification
+
+model: data2vec_audio
+task: intent_classification
+
+task_config:
+  hf_dataset_id: superb
+  hf_config: ic
+  n_classes: 31
+  max_train_samples: 10000
+  max_val_samples: 2000
+  max_test_samples: 2000
+  batch_size: 16
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 5
+max_grad_norm: 1.0
+
+sigma: 0.01
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/data2vec_ic

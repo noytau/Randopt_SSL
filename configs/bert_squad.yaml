@@ -1,0 +1,44 @@
+# BERT-Large × SQuAD v2 (Extractive QA with unanswerable questions)
+# Span extraction: predict start/end token positions
+# Primary metric: F1 ↑
+#
+# IMPORTANT: BERT must output full sequence (output_cls_only=False).
+# This is handled automatically in SQuADTask.evaluate().
+
+model: bert_large
+model_config:
+  output_cls_only: false
+
+task: squad
+
+task_config:
+  max_length: 384
+  stride: 128
+  max_train_samples: 5000
+  max_val_samples: 1000
+  max_test_samples: 1000
+  batch_size: 16
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 5
+weight_decay: 0.0001
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+sigma: 0.005
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/bert_squad

@@ -321,3 +321,169 @@ class CoLATask(GLUETask):
         mcc = matthews_corrcoef(labels, preds) if len(set(labels)) > 1 else 0.0
         accuracy = sum(p == l for p, l in zip(preds, labels)) / max(len(labels), 1)
         return {"mcc": mcc, "accuracy": accuracy}
+
+
+# ── STS-B Task ────────────────────────────────────────────────────────────────
+
+class STSBDataset(torch.utils.data.Dataset):
+    """STS-B dataset wrapper. Labels are float similarity scores (0.0–5.0)."""
+
+    def __init__(self, hf_dataset, tokenizer, max_length: int):
+        self.dataset = hf_dataset
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        text_a = item["sentence1"]
+        text_b = item["sentence2"]
+
+        enc = self.tokenizer(
+            text_a, text_b,
+            max_length=self.max_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        label = float(item["label"])
+        return {
+            "input_ids": enc["input_ids"].squeeze(0),
+            "attention_mask": enc["attention_mask"].squeeze(0),
+            "token_type_ids": enc.get("token_type_ids", torch.zeros_like(enc["input_ids"])).squeeze(0),
+            "labels": torch.tensor(label, dtype=torch.float),
+        }
+
+
+class STSBRegressionHead(nn.Module):
+    """
+    CLS-pool → dropout → Linear(input_dim, 1) → squeeze → [B] float scores.
+    """
+
+    def __init__(self, input_dim: int, dropout: float = 0.1):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.regressor = nn.Linear(input_dim, 1)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """features: [B, 1, D] or [B, D] → scores: [B]"""
+        if features.dim() == 3:
+            x = features[:, 0, :]   # CLS token → [B, D]
+        else:
+            x = features
+        return self.regressor(self.dropout(x)).squeeze(-1)   # [B]
+
+
+@register_task("stsb")
+class STSBTask(Task):
+    """
+    Semantic Textual Similarity Benchmark (STS-B) from GLUE.
+    Regression task: predict similarity score 0.0–5.0.
+    Primary metric: Spearman ρ ↑
+    """
+
+    def __init__(
+        self,
+        max_length: int = 128,
+        max_train_samples: int = None,
+        max_val_samples: int = None,
+        max_test_samples: int = None,
+        batch_size: int = 32,
+        num_workers: int = 2,
+    ):
+        self._max_length = max_length
+        self._max_train = max_train_samples
+        self._max_val = max_val_samples
+        self._max_test = max_test_samples
+        self._batch_size = batch_size
+        self._num_workers = num_workers
+        self._dataloaders: Dict[str, DataLoader] = {}
+        self._tokenizer = None
+
+    def name(self) -> str:
+        return "stsb"
+
+    def primary_metric(self) -> Tuple[str, bool]:
+        return ("spearman", True)
+
+    def set_processor(self, processor):
+        self._tokenizer = processor
+
+    def set_tokenizer(self, tokenizer):
+        self._tokenizer = tokenizer
+
+    def load_data(self, split: str = "train") -> DataLoader:
+        if split in self._dataloaders:
+            return self._dataloaders[split]
+
+        from datasets import load_dataset
+
+        hf_split = {"train": "train", "val": "validation", "test": "validation"}.get(split, split)
+
+        logger.info(f"  Loading GLUE/stsb {hf_split}...")
+        ds = load_dataset("glue", "stsb", split=hf_split, trust_remote_code=True)
+
+        max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
+        if max_s and len(ds) > max_s:
+            ds = ds.select(range(max_s))
+
+        dataset = STSBDataset(ds, self._tokenizer, self._max_length)
+        loader = DataLoader(
+            dataset,
+            batch_size=self._batch_size,
+            shuffle=(split == "train"),
+            collate_fn=glue_collate,
+            num_workers=self._num_workers,
+            pin_memory=True,
+        )
+        self._dataloaders[split] = loader
+        logger.info(f"  Loaded {len(dataset)} samples, {len(loader)} batches.")
+        return loader
+
+    def build_head(self, input_dim: int, device: torch.device) -> nn.Module:
+        return STSBRegressionHead(input_dim).to(device)
+
+    def get_loss_fn(self):
+        mse = nn.MSELoss()
+
+        def loss_fn(preds: torch.Tensor, batch: Dict) -> torch.Tensor:
+            labels = batch["labels"].to(preds.device)
+            return mse(preds, labels)
+
+        return loss_fn
+
+    def evaluate(
+        self,
+        model,
+        head: nn.Module,
+        dataloader: DataLoader,
+        device: torch.device,
+    ) -> Dict[str, float]:
+        from scipy.stats import pearsonr, spearmanr
+
+        head.eval()
+        all_preds = []
+        all_labels = []
+
+        with torch.no_grad():
+            for batch in dataloader:
+                batch_dev = {k: v.to(device) for k, v in batch.items()}
+                from src.randopt.core import RandOptEnsemble
+                if isinstance(model, RandOptEnsemble):
+                    features = model.extract_features_ensemble(batch_dev)
+                else:
+                    features = model.extract_features(batch_dev)
+                preds = head(features)
+                all_preds.extend(preds.cpu().tolist())
+                all_labels.extend(batch["labels"].tolist())
+
+        if len(set(all_labels)) < 2 or len(set(all_preds)) < 2:
+            pearson_r, spearman_rho = 0.0, 0.0
+        else:
+            pearson_r, _ = pearsonr(all_labels, all_preds)
+            spearman_rho, _ = spearmanr(all_labels, all_preds)
+
+        head.train()
+        return {"spearman": float(spearman_rho), "pearson": float(pearson_r)}

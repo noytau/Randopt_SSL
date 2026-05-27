@@ -30,18 +30,25 @@ import yaml
 
 # ── Force-import all modules so @register decorators fire ──────────────────
 # Audio
-import src.models.data2vec_audio       # noqa: F401
-import src.tasks.audio.asr             # noqa: F401
+import src.models.data2vec_audio               # noqa: F401
+import src.tasks.audio.asr                     # noqa: F401
+import src.tasks.audio.keyword_spotting        # noqa: F401
+import src.tasks.audio.speaker_id              # noqa: F401
+import src.tasks.audio.emotion_recognition     # noqa: F401
+import src.tasks.audio.intent_classification   # noqa: F401
 # NLP
-import src.models.bert_large           # noqa: F401
-import src.tasks.nlp.glue_tasks        # noqa: F401
+import src.models.bert_large                   # noqa: F401
+import src.tasks.nlp.glue_tasks                # noqa: F401
+import src.tasks.nlp.squad                     # noqa: F401
 # Vision
-import src.models.dinov3               # noqa: F401
-import src.tasks.vision.imagenet_cls   # noqa: F401
+import src.models.dinov3                       # noqa: F401
+import src.tasks.vision.imagenet_cls           # noqa: F401
+import src.tasks.vision.segmentation           # noqa: F401
+import src.tasks.vision.depth_estimation       # noqa: F401
 # Methods
-import src.baselines.linear_probe      # noqa: F401
-import src.baselines.finetune          # noqa: F401
-import src.randopt.core                # noqa: F401
+import src.baselines.linear_probe              # noqa: F401
+import src.baselines.finetune                  # noqa: F401
+import src.randopt.core                        # noqa: F401
 
 from src.interfaces import EvalResult
 from src.registry import (
