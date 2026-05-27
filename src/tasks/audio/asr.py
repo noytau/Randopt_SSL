@@ -64,9 +64,19 @@ class CTCHead(nn.Module):
 # ── Dataset ──────────────────────────────────────────────────────────────────
 
 class LibriSpeechDataset(torch.utils.data.Dataset):
-    """Wraps HuggingFace librispeech_asr dataset."""
+    """Wraps HuggingFace librispeech_asr dataset.
+
+    Uses Audio(decode=False) + soundfile to avoid torchcodec dependency
+    (datasets ≥ 4.0 switched from soundfile to torchcodec for audio decode).
+    """
 
     def __init__(self, hf_dataset, processor, max_length_sec: float = 15.0):
+        # Disable HF auto-decode to avoid torchcodec dependency
+        try:
+            from datasets import Audio
+            hf_dataset = hf_dataset.cast_column("audio", Audio(decode=False))
+        except Exception:
+            pass
         self.dataset = hf_dataset
         self.processor = processor
         self.max_length = int(max_length_sec * 16_000)  # 16kHz
@@ -75,8 +85,18 @@ class LibriSpeechDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
+        from src.tasks.audio.audio_utils import _decode_audio_item
         item = self.dataset[idx]
-        audio = item["audio"]["array"]
+        audio, sr = _decode_audio_item(item["audio"])
+        # LibriSpeech is always 16 kHz — if somehow different, resample
+        if sr != 16_000:
+            try:
+                import torchaudio.functional as TAF
+                w = torch.from_numpy(audio).unsqueeze(0)
+                audio = TAF.resample(w, sr, 16_000).squeeze(0).numpy()
+            except ImportError:
+                import scipy.signal as sps, numpy as np
+                audio = sps.resample(audio, int(len(audio) * 16_000 / sr)).astype(np.float32)
 
         # Truncate long audio
         if len(audio) > self.max_length:
