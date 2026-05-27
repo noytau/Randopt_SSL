@@ -37,11 +37,11 @@ class IntentClassificationTask(Task):
 
     def __init__(
         self,
-        hf_dataset_id: str = "superb",
-        hf_config: str = "ic",
-        n_classes: int = DEFAULT_N_CLASSES,
-        audio_key: str = "file",
-        label_key: str = "intent",
+        hf_dataset_id: str = "PolyAI/minds14",
+        hf_config: str = "de-DE",
+        n_classes: int = 14,
+        audio_key: str = "audio",
+        label_key: str = "intent_class",
         max_train_samples: int = None,
         max_val_samples: int = None,
         max_test_samples: int = None,
@@ -77,24 +77,31 @@ class IntentClassificationTask(Task):
         from datasets import load_dataset
 
         split_map = {"train": "train", "val": "validation", "test": "test"}
-        hf_split = split_map[split]
+        hf_split = split_map.get(split, split)
 
         logger.info(f"  Loading {self._hf_dataset_id}/{self._hf_config} {hf_split}...")
 
-        load_kwargs = dict()
-        if self._hf_config:
-            ds = load_dataset(
-                self._hf_dataset_id,
-                self._hf_config,
-                split=hf_split,
-                **load_kwargs,
-            )
-        else:
-            ds = load_dataset(
-                self._hf_dataset_id,
-                split=hf_split,
-                **load_kwargs,
-            )
+        try:
+            if self._hf_config:
+                ds = load_dataset(self._hf_dataset_id, self._hf_config, split=hf_split)
+            else:
+                ds = load_dataset(self._hf_dataset_id, split=hf_split)
+        except Exception:
+            # Dataset only has "train" — carve val/test from tail
+            if self._hf_config:
+                full = load_dataset(self._hf_dataset_id, self._hf_config, split="train")
+            else:
+                full = load_dataset(self._hf_dataset_id, split="train")
+            n = len(full)
+            n_val  = self._max_val  if self._max_val  else max(int(n * 0.1), 1)
+            n_test = self._max_test if self._max_test else max(int(n * 0.1), 1)
+            if split == "train":
+                ds = full.select(range(n - n_val - n_test))
+            elif split == "val":
+                ds = full.select(range(n - n_val - n_test, n - n_test))
+            else:
+                ds = full.select(range(n - n_test, n))
+            logger.info(f"  Carved {split} from train: {len(ds)} samples.")
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:

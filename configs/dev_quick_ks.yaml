@@ -4,6 +4,7 @@ model: data2vec_audio
 task: keyword_spotting
 
 task_config:
+  # Default: PolyAI/minds14 en-US (14 intent classes, Parquet-native proxy for KS)
   max_train_samples: 50
   max_val_samples: 20
   max_test_samples: 20

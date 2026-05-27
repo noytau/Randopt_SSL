@@ -1,9 +1,15 @@
 """
-Emotion Recognition Task on CREMA-D (or configurable HF dataset).
-6 emotion classes: anger, disgust, fear, happiness, neutral, sadness.
-Metric: Accuracy ↑ + weighted F1
+Emotion Recognition Task.
+Default: PolyAI/minds14 zh-CN (14 intent classes, real audio, Parquet-native proxy).
 
-Model: data2vec_audio → [B, S, 1024] → mean-pool → [B, 1024] → Linear(1024, 6)
+Production note: replace with CREMA-D (6 classes) or IEMOCAP (4 classes) once the
+audio files are downloaded to the cluster. Set in YAML:
+  hf_dataset_id: crema_d    # or a local HF dataset loaded with load_from_disk
+  n_classes: 6
+  label_key: label
+
+Metric: Accuracy ↑ + weighted F1
+Model: data2vec_audio → [B, S, 1024] → mean-pool → [B, 1024] → Linear(1024, n_classes)
 """
 
 import logging
@@ -38,11 +44,11 @@ class EmotionRecognitionTask(Task):
 
     def __init__(
         self,
-        hf_dataset_id: str = "crema_d",
-        hf_config: str = None,
-        n_classes: int = DEFAULT_N_CLASSES,
+        hf_dataset_id: str = "PolyAI/minds14",
+        hf_config: str = "zh-CN",
+        n_classes: int = 14,
         audio_key: str = "audio",
-        label_key: str = "label",
+        label_key: str = "intent_class",
         max_train_samples: int = None,
         max_val_samples: int = 500,
         max_test_samples: int = 500,
@@ -77,55 +83,34 @@ class EmotionRecognitionTask(Task):
 
         from datasets import load_dataset
 
-        logger.info(f"  Loading {self._hf_dataset_id} for emotion recognition...")
+        logger.info(f"  Loading {self._hf_dataset_id}/{self._hf_config} for emotion recognition...")
 
-        load_kwargs = dict()
-        if self._hf_config:
-            load_kwargs["name"] = self._hf_config
+        split_map = {"train": "train", "val": "validation", "test": "test"}
+        hf_split = split_map.get(split, split)
 
         try:
-            ds_train = load_dataset(self._hf_dataset_id, split="train", **load_kwargs)
-            has_train_split = True
-        except Exception:
-            has_train_split = False
-
-        if has_train_split:
-            try:
-                ds_val = load_dataset(self._hf_dataset_id, split="validation", **load_kwargs)
-                has_val_split = True
-            except Exception:
-                has_val_split = False
-        else:
-            # If no train split at all, load everything and slice
-            ds_all = load_dataset(self._hf_dataset_id, **load_kwargs)
-            ds_train = ds_all["train"] if "train" in ds_all else list(ds_all.values())[0]
-            has_val_split = False
-
-        # CREMA-D only has "train" — carve out val/test from it
-        if split == "train":
-            ds = ds_train
-            max_s = self._max_train
-        elif split in ("val", "test"):
-            if has_val_split and split == "val":
-                ds = ds_val
-                max_s = self._max_val
+            if self._hf_config:
+                ds = load_dataset(self._hf_dataset_id, self._hf_config, split=hf_split)
             else:
-                # Carve from end of train set
-                n_total = len(ds_train)
-                val_end = n_total
-                val_start = max(0, n_total - (self._max_val or 500) - (self._max_test or 500))
-                if split == "val":
-                    start = val_start
-                    end = start + (self._max_val or 500)
-                else:
-                    start = val_start + (self._max_val or 500)
-                    end = val_end
-                ds = ds_train.select(range(start, min(end, n_total)))
-                max_s = None  # already sliced
-        else:
-            ds = ds_train
-            max_s = None
+                ds = load_dataset(self._hf_dataset_id, split=hf_split)
+        except Exception:
+            # Dataset only has "train" (e.g., CREMA-D, minds14) — carve val/test from tail
+            if self._hf_config:
+                full = load_dataset(self._hf_dataset_id, self._hf_config, split="train")
+            else:
+                full = load_dataset(self._hf_dataset_id, split="train")
+            n = len(full)
+            n_val  = self._max_val  if self._max_val  else max(int(n * 0.1), 1)
+            n_test = self._max_test if self._max_test else max(int(n * 0.1), 1)
+            if split == "train":
+                ds = full.select(range(n - n_val - n_test))
+            elif split == "val":
+                ds = full.select(range(n - n_val - n_test, n - n_test))
+            else:
+                ds = full.select(range(n - n_test, n))
+            logger.info(f"  Carved {split} from train: {len(ds)} samples.")
 
+        max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:
             ds = ds.select(range(max_s))
 
