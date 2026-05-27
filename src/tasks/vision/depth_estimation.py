@@ -177,10 +177,10 @@ class DepthEstimationTask(Task):
 
         logger.info(f"  Loading {self._hf_dataset_id} {hf_split}...")
         try:
-            ds = load_dataset(self._hf_dataset_id, split=hf_split, trust_remote_code=True)
+            ds = load_dataset(self._hf_dataset_id, split=hf_split, )
         except Exception as e:
             logger.warning(f"  Failed to load {hf_split} split: {e}. Trying 'train'...")
-            ds = load_dataset(self._hf_dataset_id, split="train", trust_remote_code=True)
+            ds = load_dataset(self._hf_dataset_id, split="train", )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:

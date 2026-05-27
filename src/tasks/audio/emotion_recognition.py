@@ -79,7 +79,7 @@ class EmotionRecognitionTask(Task):
 
         logger.info(f"  Loading {self._hf_dataset_id} for emotion recognition...")
 
-        load_kwargs = dict(trust_remote_code=True)
+        load_kwargs = dict()
         if self._hf_config:
             load_kwargs["name"] = self._hf_config
 

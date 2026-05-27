@@ -81,7 +81,7 @@ class IntentClassificationTask(Task):
 
         logger.info(f"  Loading {self._hf_dataset_id}/{self._hf_config} {hf_split}...")
 
-        load_kwargs = dict(trust_remote_code=True)
+        load_kwargs = dict()
         if self._hf_config:
             ds = load_dataset(
                 self._hf_dataset_id,

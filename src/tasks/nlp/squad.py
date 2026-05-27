@@ -214,7 +214,7 @@ class SQuADTask(Task):
         hf_split = split_map[split]
 
         logger.info(f"  Loading squad_v2 {hf_split}...")
-        ds = load_dataset("squad_v2", split=hf_split, trust_remote_code=True)
+        ds = load_dataset("squad_v2", split=hf_split, )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:

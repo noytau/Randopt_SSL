@@ -150,7 +150,7 @@ class GLUETask(Task):
         hf_split = {"train": "train", "val": "validation", "test": "validation"}.get(split, split)
 
         logger.info(f"  Loading GLUE/{self._glue_config} {hf_split}...")
-        ds = load_dataset("glue", self._glue_config, split=hf_split, trust_remote_code=True)
+        ds = load_dataset("glue", self._glue_config, split=hf_split, )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:
@@ -272,7 +272,7 @@ class MNLITask(GLUETask):
         }.get(split, split)
 
         logger.info(f"  Loading GLUE/mnli {hf_split}...")
-        ds = load_dataset("glue", "mnli", split=hf_split, trust_remote_code=True)
+        ds = load_dataset("glue", "mnli", split=hf_split, )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:
@@ -423,7 +423,7 @@ class STSBTask(Task):
         hf_split = {"train": "train", "val": "validation", "test": "validation"}.get(split, split)
 
         logger.info(f"  Loading GLUE/stsb {hf_split}...")
-        ds = load_dataset("glue", "stsb", split=hf_split, trust_remote_code=True)
+        ds = load_dataset("glue", "stsb", split=hf_split, )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:

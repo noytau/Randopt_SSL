@@ -68,12 +68,11 @@ class KeywordSpottingTask(Task):
         split_map = {"train": "train", "val": "validation", "test": "test"}
         hf_split = split_map[split]
 
-        logger.info(f"  Loading speech_commands v0.02 {hf_split}...")
+        logger.info(f"  Loading google/speech_commands v0.02 {hf_split}...")
         ds = load_dataset(
-            "speech_commands",
+            "google/speech_commands",
             "v0.02",
             split=hf_split,
-            trust_remote_code=True,
         )
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)

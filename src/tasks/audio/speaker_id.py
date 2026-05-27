@@ -135,7 +135,7 @@ class SpeakerIDTask(Task):
         ds = load_dataset(
             "librispeech_asr",
             split=hf_split,
-            trust_remote_code=True,
+            
         )
 
         # Build speaker mapping from train on first call
