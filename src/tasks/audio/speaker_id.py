@@ -18,6 +18,7 @@ from src.registry import register_task
 from src.tasks.audio.audio_utils import (
     AudioClassificationHead,
     audio_classification_collate,
+    _decode_audio_item,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,11 @@ DEFAULT_N_SPEAKERS = 251
 # ── Dataset ──────────────────────────────────────────────────────────────────
 
 class LibriSpeechSIDDataset(Dataset):
-    """LibriSpeech dataset wrapper for speaker identification."""
+    """LibriSpeech dataset wrapper for speaker identification.
+
+    Uses Audio(decode=False) + soundfile to avoid torchcodec dependency.
+    LibriSpeech audio is 16 kHz so no resampling is needed.
+    """
 
     def __init__(
         self,
@@ -38,6 +43,12 @@ class LibriSpeechSIDDataset(Dataset):
         speaker_to_label: Dict[int, int],
         max_length_sec: float = 10.0,
     ):
+        # Disable HF auto-decode to avoid torchcodec dependency
+        try:
+            from datasets import Audio
+            hf_dataset = hf_dataset.cast_column("audio", Audio(decode=False))
+        except Exception:
+            pass
         self.dataset = hf_dataset
         self.processor = processor
         self.speaker_to_label = speaker_to_label
@@ -48,9 +59,20 @@ class LibriSpeechSIDDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataset[idx]
-        audio_dict = item["audio"]
-        array = audio_dict["array"]
-        sampling_rate = audio_dict["sampling_rate"]
+        array, sampling_rate = _decode_audio_item(item["audio"])
+
+        # LibriSpeech is 16 kHz — resample only if something unexpected
+        if sampling_rate != 16_000:
+            try:
+                import torchaudio.functional as TAF
+                waveform = torch.from_numpy(array).unsqueeze(0)
+                waveform = TAF.resample(waveform, orig_freq=sampling_rate, new_freq=16_000)
+                array = waveform.squeeze(0).numpy()
+            except ImportError:
+                import numpy as np, scipy.signal as sps
+                n = int(len(array) * 16_000 / sampling_rate)
+                array = sps.resample(array, n).astype(np.float32)
+            sampling_rate = 16_000
 
         if len(array) > self.max_length:
             array = array[: self.max_length]

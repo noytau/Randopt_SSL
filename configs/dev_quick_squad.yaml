@@ -1,0 +1,40 @@
+# Dev-quick config for SQuAD v2 (tiny data for pipeline testing)
+# Span extraction: predict start/end token positions
+# Primary metric: F1 ↑
+# BERT must output full sequence (output_cls_only=False).
+
+model: bert_large
+model_config:
+  output_cls_only: false
+
+task: squad
+
+task_config:
+  max_length: 128
+  stride: 64
+  max_train_samples: 50
+  max_val_samples: 20
+  max_test_samples: 20
+  batch_size: 4
+  num_workers: 0
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 2
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 1
+
+sigma: 0.005
+n_candidates: 5
+top_k: 2
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dev_quick_squad

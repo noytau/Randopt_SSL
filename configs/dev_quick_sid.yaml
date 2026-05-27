@@ -1,0 +1,35 @@
+# Dev-quick config for Speaker Identification (tiny data for pipeline testing)
+
+model: data2vec_audio
+model_config:
+  model_id: facebook/data2vec-audio-base   # base (95M) fits in 10GB GPU for finetune dev
+task: speaker_id
+
+task_config:
+  librispeech_subset: clean
+  max_train_samples: 50
+  max_val_samples: 20
+  max_test_samples: 20
+  batch_size: 4
+  num_workers: 0
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+head_lr: 0.001
+head_epochs: 2
+
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 1
+
+sigma: 0.01
+n_candidates: 5
+top_k: 2
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/dev_quick_sid
