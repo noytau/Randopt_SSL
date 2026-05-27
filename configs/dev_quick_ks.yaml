@@ -1,6 +1,8 @@
 # Dev-quick config for Keyword Spotting (tiny data for pipeline testing)
 
 model: data2vec_audio
+model_config:
+  model_id: facebook/data2vec-audio-base   # base (95M) fits in 10GB GPU for finetune dev
 task: keyword_spotting
 
 task_config:

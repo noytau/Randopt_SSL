@@ -191,7 +191,8 @@ def main():
 
     # ── Load model ──
     logger.info(f"\n[1/4] Loading model: {model_name}")
-    model = get_model(model_name)
+    model_config = config.get("model_config", {})
+    model = get_model(model_name, **model_config)
     model.load(device)
 
     # ── Load task ──

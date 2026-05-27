@@ -85,7 +85,10 @@ class Data2VecAudioModel(SSLModel):
         return outputs.last_hidden_state  # [B, S, 1024]
 
     def hidden_dim(self) -> int:
-        return 1024  # data2vec-audio Large
+        """Return actual hidden size from the loaded model config (base=768, large=1024)."""
+        if self._model is not None:
+            return self._model.config.hidden_size
+        return 1024  # fallback: data2vec-audio Large
 
     def get_pretrained_state_dict(self) -> Dict[str, torch.Tensor]:
         return {k: v.clone() for k, v in self._pretrained_state.items()}

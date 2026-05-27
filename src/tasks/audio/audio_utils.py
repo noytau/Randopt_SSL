@@ -5,11 +5,21 @@ Provides:
   - AudioClassificationHead: mean-pool + linear for [B, S, D] features
   - AudioClassificationDataset: generic HF dataset wrapper for audio classification
   - audio_classification_collate: pads input_values and builds attention_mask
+
+Audio decoding note:
+  datasets ≥ 4.0 dropped soundfile in favour of torchcodec for automatic audio
+  decoding. To avoid the torchcodec dependency we call
+      hf_dataset.cast_column(audio_key, Audio(decode=False))
+  which makes HF return raw bytes instead of a decoded numpy array. We then
+  decode manually with soundfile (always available in the Randopt environment).
 """
 
+import io
 import logging
 from typing import Dict, List
 
+import numpy as np
+import soundfile as sf
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
@@ -41,10 +51,55 @@ class AudioClassificationHead(nn.Module):
 
 # ── Dataset ──────────────────────────────────────────────────────────────────
 
+def _decode_audio_item(audio_val) -> tuple:
+    """
+    Decode an audio item coming from a HuggingFace dataset.
+
+    Handles three formats:
+      1. Already-decoded dict  {"array": np.ndarray, "sampling_rate": int}
+         — produced by old datasets or when cast_column is not used.
+      2. Raw-bytes dict        {"bytes": bytes, "path": str|None}
+         — produced by cast_column("audio", Audio(decode=False)).
+      3. File-path string      "/absolute/path/to/file.wav"
+         — uncommon, but handled for robustness.
+
+    Returns (array: np.ndarray, sampling_rate: int).
+    """
+    if isinstance(audio_val, dict):
+        if "array" in audio_val and audio_val["array"] is not None:
+            # Already decoded — datasets < 4.0 or pre-decoded cache
+            return np.array(audio_val["array"], dtype=np.float32), int(audio_val.get("sampling_rate", 16_000))
+
+        # datasets ≥ 4.0 with decode=False → raw bytes
+        raw_bytes = audio_val.get("bytes")
+        path = audio_val.get("path")
+
+        if raw_bytes is not None:
+            array, sr = sf.read(io.BytesIO(raw_bytes), dtype="float32")
+        elif path is not None:
+            array, sr = sf.read(path, dtype="float32")
+        else:
+            raise ValueError(f"Cannot decode audio dict: {audio_val.keys()}")
+
+    elif isinstance(audio_val, str):
+        array, sr = sf.read(audio_val, dtype="float32")
+    else:
+        raise TypeError(f"Unexpected audio type: {type(audio_val)}")
+
+    # Downmix to mono if needed
+    if array.ndim > 1:
+        array = array.mean(axis=1)
+
+    return array.astype(np.float32), int(sr)
+
+
 class AudioClassificationDataset(Dataset):
     """
     Generic wrapper around a HuggingFace audio classification dataset.
-    Handles audio extraction, truncation, and processor calls.
+
+    Automatically switches HF audio decoding to raw-bytes mode
+    (``Audio(decode=False)``) so that torchcodec is never required.
+    Falls back silently if the dataset does not support cast_column.
     """
 
     def __init__(
@@ -55,20 +110,42 @@ class AudioClassificationDataset(Dataset):
         audio_key: str = "audio",
         max_length_sec: float = 10.0,
     ):
+        # Disable HF automatic audio decoding to avoid torchcodec dependency
+        try:
+            from datasets import Audio
+            hf_dataset = hf_dataset.cast_column(audio_key, Audio(decode=False))
+            logger.debug("AudioClassificationDataset: cast '%s' to Audio(decode=False).", audio_key)
+        except Exception as exc:
+            logger.debug("AudioClassificationDataset: could not cast audio column (%s). "
+                         "Proceeding with default decoding.", exc)
+
         self.dataset = hf_dataset
         self.processor = processor
         self.label_key = label_key
         self.audio_key = audio_key
-        self.max_length = int(max_length_sec * 16_000)  # assume 16kHz
+        self.max_length = int(max_length_sec * 16_000)  # assume 16 kHz
 
     def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, idx):
         item = self.dataset[idx]
-        audio_dict = item[self.audio_key]
-        array = audio_dict["array"]
-        sampling_rate = audio_dict["sampling_rate"]
+        array, sampling_rate = _decode_audio_item(item[self.audio_key])
+
+        # Resample to 16 kHz if needed (data2vec-audio always expects 16 kHz)
+        target_sr = 16_000
+        if sampling_rate != target_sr:
+            try:
+                import torchaudio.functional as TAF
+                waveform = torch.from_numpy(array).unsqueeze(0)   # [1, T]
+                waveform = TAF.resample(waveform, orig_freq=sampling_rate, new_freq=target_sr)
+                array = waveform.squeeze(0).numpy()
+            except ImportError:
+                # fallback: scipy
+                import scipy.signal as sps
+                n_samples = int(len(array) * target_sr / sampling_rate)
+                array = sps.resample(array, n_samples).astype(np.float32)
+            sampling_rate = target_sr
 
         # Truncate to max length
         if len(array) > self.max_length:

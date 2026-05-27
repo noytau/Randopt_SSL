@@ -166,18 +166,24 @@ class IntentClassificationTask(Task):
 
 # ── Internal dataset for SUPERB IC ───────────────────────────────────────────
 
-import numpy as np
 from torch.utils.data import Dataset
+from src.tasks.audio.audio_utils import _decode_audio_item
 
 
 class _IntentDataset(Dataset):
     """
-    Dataset for SUPERB IC. Handles both dict-audio and file-path audio keys.
-    SUPERB IC stores audio as a dict with 'array' and 'sampling_rate' (or as file path).
+    Dataset for SUPERB IC / minds14. Handles both raw-bytes and decoded audio.
+    Uses _decode_audio_item() which supports Audio(decode=False) to avoid torchcodec.
     """
 
     def __init__(self, hf_dataset, processor, audio_key: str, label_key: str,
                  max_length_sec: float = 10.0):
+        # Disable HF auto-decode to avoid torchcodec dependency
+        try:
+            from datasets import Audio
+            hf_dataset = hf_dataset.cast_column(audio_key, Audio(decode=False))
+        except Exception:
+            pass
         self.dataset = hf_dataset
         self.processor = processor
         self.audio_key = audio_key
@@ -189,20 +195,23 @@ class _IntentDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataset[idx]
-        audio_val = item[self.audio_key]
+        array, sampling_rate = _decode_audio_item(item[self.audio_key])
 
-        if isinstance(audio_val, dict):
-            array = audio_val["array"]
-            sampling_rate = audio_val["sampling_rate"]
-        elif isinstance(audio_val, str):
-            # File path
-            import soundfile as sf
-            array, sampling_rate = sf.read(audio_val, dtype="float32")
-            if array.ndim > 1:
-                array = array.mean(axis=1)
-        else:
-            array = np.array(audio_val, dtype=np.float32)
-            sampling_rate = 16_000
+        # Resample to 16 kHz if needed
+        target_sr = 16_000
+        if sampling_rate != target_sr:
+            import numpy as np
+            try:
+                import torchaudio.functional as TAF
+                import torch as _torch
+                waveform = _torch.from_numpy(array).unsqueeze(0)
+                waveform = TAF.resample(waveform, orig_freq=sampling_rate, new_freq=target_sr)
+                array = waveform.squeeze(0).numpy()
+            except ImportError:
+                import scipy.signal as sps
+                n_samples = int(len(array) * target_sr / sampling_rate)
+                array = sps.resample(array, n_samples).astype(np.float32)
+            sampling_rate = target_sr
 
         if len(array) > self.max_length:
             array = array[: self.max_length]

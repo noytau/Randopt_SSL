@@ -1,11 +1,13 @@
 # Dev-quick config for Emotion Recognition (tiny data for pipeline testing)
+# Uses PolyAI/minds14 zh-CN as proxy (14 intent classes, Parquet-native, real audio)
 
 model: data2vec_audio
+model_config:
+  model_id: facebook/data2vec-audio-base   # base (95M) fits in 10GB GPU for finetune dev
 task: emotion_recognition
 
 task_config:
-  hf_dataset_id: crema_d
-  n_classes: 6
+  # Default: PolyAI/minds14 zh-CN (14 intent classes, proxy for ER)
   max_train_samples: 50
   max_val_samples: 20
   max_test_samples: 20
