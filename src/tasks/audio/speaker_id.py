@@ -145,9 +145,9 @@ class SpeakerIDTask(Task):
 
         from datasets import load_dataset
 
-        # train.100 for train, validation.clean for val/test
+        # train.clean.100 for train, validation.clean for val/test
         split_map = {
-            "train": "train.100",
+            "train": "train.clean.100",
             "val": "validation.clean",
             "test": "validation.clean",
         }
