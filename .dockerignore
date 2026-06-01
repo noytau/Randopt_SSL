@@ -1,10 +1,12 @@
-# Don't bake source code or results into the image.
-# Everything runs off the PVC at runtime.
+# Exclude large/generated files from image build context.
+# Source code IS baked in (src/, configs/, scripts/).
 .git
 results/
-tests/
 *.pyc
 __pycache__/
 .pytest_cache/
 *.egg-info/
 .ruff_cache/
+.env
+*.wandb_api_key
+*.github_token

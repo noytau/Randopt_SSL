@@ -1,13 +1,18 @@
 #!/bin/bash
 # Submit a single RandOpt experiment to the RunAI cluster.
 #
-# Usage:
-#   bash scripts/submit_runai.sh configs/bert_rte.yaml
-#   bash scripts/submit_runai.sh configs/qwen2_5_3b_countdown.yaml --gpu 2
+# Prerequisites:
+#   Image noyhassid/randopt:v1 must be built and pushed:
+#     cd ~/PycharmProjects/Randopt && docker build -t noyhassid/randopt:v1 . && docker push noyhassid/randopt:v1
 #
-# Storage:  on Geoffrey = /mnt5/noy/   inside container = /storage/noy/
-# Image:    noyhassid/spectralfm-lean:v6
-# Project:  raja
+# Usage:
+#   bash scripts/submit_runai.sh configs/qwen2_5_0_5b_countdown.yaml
+#   bash scripts/submit_runai.sh configs/qwen2_5_3b_gsm8k.yaml --gpu 2
+#
+# Code:    baked into image at /opt/randopt
+# Results: /storage/noy/Randopt/results/  (Lustre PVC, persists)
+# Image:   noyhassid/randopt:v1
+# Project: raja
 
 set -e
 
@@ -29,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 JOB_NAME="randopt-$(basename $CONFIG .yaml | tr '_' '-')"
-CONTAINER_WORKDIR="/storage/noy/Randopt"
+CODE_DIR="/opt/randopt"
 
 echo "Submitting: $JOB_NAME"
 echo "  Config : $CONFIG"
@@ -41,12 +46,11 @@ runai submit "$JOB_NAME" \
     --image noyhassid/randopt:v1 \
     --gpu "$GPU" \
     --existing-pvc claimname=storage,path=/storage \
-    --working-dir "$CONTAINER_WORKDIR" \
+    --working-dir "$CODE_DIR" \
     --node-pools faculty,raja \
     --command -- bash -c "
         [ -f /storage/noy/.wandb_api_key ] && export WANDB_API_KEY=\$(cat /storage/noy/.wandb_api_key)
-        [ -f /storage/noy/miniconda3/envs/spectralfm/bin/python3 ] && export PATH=/storage/noy/miniconda3/envs/spectralfm/bin:/storage/noy/miniconda3/bin:\$PATH
-        cd ${CONTAINER_WORKDIR}
+        cd ${CODE_DIR}
         python3 -m scripts.run --config ${CONFIG} ${NO_WANDB}
     "
 

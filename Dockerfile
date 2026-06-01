@@ -1,20 +1,20 @@
 # Randopt Benchmark — Docker image
 #
 # Built for: Qwen2.5 LLM experiments (Countdown, GSM8K, MBPP)
-#            + optional encoder experiments (BERT, data2vec, DINOv2)
 #
-# Build & push:
+# Build & push (from repo root — code is baked into the image):
 #   docker build -t noyhassid/randopt:v1 .
 #   docker push noyhassid/randopt:v1
 #
 # RunAI usage:
-#   --image noyhassid/randopt:v1
-#   Source code lives in the PVC at /storage/noy/Randopt — nothing is baked in.
+#   --image noyhassid/randopt:v1  --working-dir /opt/randopt
+#   HF model cache and results go to PVC: /storage/noy/
 
 FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+# HF models are cached on the Lustre PVC (persists across jobs)
 ENV HF_HOME=/storage/noy/.cache/huggingface
 
 # ── System packages ─────────────────────────────────────────────────────────
@@ -63,7 +63,15 @@ RUN pip install --no-cache-dir \
     "pyyaml>=6.0" \
     "numpy>=1.24"
 
-# ── Working directory (overridden by RunAI --working-dir) ───────────────────
-WORKDIR /workspace
+# ── Copy source code into the image ─────────────────────────────────────────
+# .dockerignore excludes: .git, results/, __pycache__, *.pyc, .ruff_cache
+COPY . /opt/randopt/
+
+# ── Register the package without re-installing its deps ─────────────────────
+# (all deps already installed above; torchaudio/jiwer skipped for lean LLM image)
+RUN pip install --no-cache-dir --no-deps -e /opt/randopt/
+
+# ── Default working directory ────────────────────────────────────────────────
+WORKDIR /opt/randopt
 
 CMD ["/bin/bash"]
