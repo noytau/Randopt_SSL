@@ -1,0 +1,32 @@
+# Qwen2.5-3B-Instruct × Countdown
+# Neural Thickets paper PRIMARY replication config
+# Paper reports ~45% accuracy for 3B at N=3000, K=50
+
+model: qwen2_5_3b
+task: countdown
+
+task_config:
+  max_train_samples: 500
+  max_val_samples: 200
+  max_test_samples: 500
+  batch_size: 8
+  num_workers: 0
+  use_synthetic: false
+
+methods:
+  - passatone
+  - majority_vote
+  - sft
+  - randopt
+
+# RandOpt config — exact paper params
+sigma_set: [0.001, 0.003, 0.005, 0.01, 0.03]
+n_candidates: 3000
+top_k: 50
+n_rounds: 1
+
+max_new_tokens: 64
+
+seed: 42
+device: auto
+output_dir: results/qwen2_5_3b_countdown

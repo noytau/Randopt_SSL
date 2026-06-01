@@ -24,20 +24,47 @@ logger = logging.getLogger(__name__)
 
 
 class PerturbationSampler:
-    """Samples weight perturbations using counter-based RNG (reproducible from seed alone)."""
+    """Samples weight perturbations using counter-based RNG (reproducible from seed alone).
 
-    def __init__(self, sigma: float, device: torch.device):
-        self.sigma = sigma
+    Supports both a single fixed σ and a set Σ of σ values (as in the Neural Thickets paper).
+    When sigma_set has >1 value, each candidate draws σ = sigma_set[seed % len(sigma_set)],
+    which is deterministic and reproducible at ensemble inference time.
+    """
+
+    def __init__(self, sigma, device: torch.device):
+        """
+        Args:
+            sigma: float, List[float], or tuple of floats.
+                   A single float is wrapped as [sigma] for uniform interface.
+        """
+        if isinstance(sigma, (int, float)):
+            self.sigma_set: List[float] = [float(sigma)]
+        else:
+            self.sigma_set = [float(s) for s in sigma]
         self.device = device
+
+    @property
+    def sigma(self) -> float:
+        """Backward-compat: returns the single σ value (only valid when sigma_set has 1 element)."""
+        return self.sigma_set[0]
+
+    def _sigma_for_seed(self, seed: int) -> float:
+        """Draw σ deterministically from Σ using the candidate seed."""
+        return self.sigma_set[seed % len(self.sigma_set)]
 
     def sample(
         self, reference_state: Dict[str, torch.Tensor], seed: int
     ) -> Dict[str, torch.Tensor]:
-        """Sample epsilon ~ N(0, sigma^2 * I) for each parameter tensor."""
+        """Sample epsilon ~ N(0, sigma^2 * I) for each parameter tensor.
+
+        σ is drawn from sigma_set using the seed index, so the same seed always
+        produces the same (σ, noise) pair — required for deterministic ensemble inference.
+        """
+        sigma = self._sigma_for_seed(seed)
         rng = torch.Generator(device="cpu").manual_seed(seed)
         epsilon = {}
         for key, param in reference_state.items():
-            noise = torch.randn(param.shape, generator=rng, device="cpu") * self.sigma
+            noise = torch.randn(param.shape, generator=rng, device="cpu") * sigma
             epsilon[key] = noise.to(self.device)
         return epsilon
 
@@ -72,22 +99,30 @@ class RandOpt(AdaptationMethod):
         3. Return ensemble wrapper + head
         """
         # ── Config ──
-        sigma = config.get("sigma", 0.01)
+        # sigma_set (paper-style Σ) takes priority; fall back to single sigma for backward compat.
+        sigma_raw = config.get("sigma_set") or config.get("sigma", 0.01)
         n_candidates = config.get("n_candidates", 100)
         top_k = config.get("top_k", 5)
         n_rounds = config.get("n_rounds", 1)
         fitness_subsample = config.get("fitness_subsample", 1.0)  # fraction of val data
 
+        sigma_display = sigma_raw if isinstance(sigma_raw, list) else sigma_raw
         logger.info(
-            f"RandOpt: sigma={sigma}, N={n_candidates}, K={top_k}, rounds={n_rounds}"
+            f"RandOpt: sigma={sigma_display}, N={n_candidates}, K={top_k}, rounds={n_rounds}"
         )
 
         # ── Step 1: Train linear head on frozen features ──
-        head = self._train_head(model, task, device, config)
+        # For generative tasks (LLMs), skip head training — the model IS the predictor.
+        from src.tasks.llm.base import GenerativeTask
+        if isinstance(task, GenerativeTask):
+            head = task.build_head(1, device)   # input_dim ignored; returns nn.Identity()
+            logger.info("  Generative task detected — skipping head training (no feature head needed).")
+        else:
+            head = self._train_head(model, task, device, config)
 
         # ── Step 2: Search perturbations ──
         M = model.get_pretrained_state_dict()
-        sampler = PerturbationSampler(sigma=sigma, device=device)
+        sampler = PerturbationSampler(sigma=sigma_raw, device=device)
         val_loader = task.load_data("val")
         metric_name, higher_is_better = task.primary_metric()
 
@@ -173,7 +208,7 @@ class RandOptEnsemble(nn.Module):
         self.top_k_seeds = top_k_seeds
 
     def extract_features_ensemble(self, batch: Any) -> torch.Tensor:
-        """Average features across K perturbed encoders."""
+        """Average features across K perturbed encoders (encoder-only models)."""
         all_features = []
         encoder = self.model.get_encoder()
 
@@ -190,3 +225,40 @@ class RandOptEnsemble(nn.Module):
         encoder.load_state_dict(self.reference_state, strict=False)
 
         return torch.stack(all_features).mean(dim=0)
+
+    def generate_ensemble(self, prompts: List[str]) -> List[str]:
+        """
+        Generate responses from K perturbed LLMs, return majority-vote answer per prompt.
+
+        Each of the K top seeds produces one response per prompt. The final answer
+        for each prompt is chosen by majority vote over the K responses.
+        Ties are broken by taking the first response in ranked order.
+
+        Used by GenerativeTask.evaluate() when model is RandOptEnsemble.
+        """
+        from collections import Counter
+
+        encoder = self.model.get_encoder()
+        per_model_responses: List[List[str]] = []  # [K, B]
+
+        for seed in self.top_k_seeds:
+            eps = self.sampler.sample(self.reference_state, seed)
+            perturbed = self.sampler.apply(self.reference_state, eps)
+            encoder.load_state_dict(perturbed, strict=False)
+
+            responses = self.model.generate(prompts)
+            per_model_responses.append(responses)
+
+        # Restore original weights
+        encoder.load_state_dict(self.reference_state, strict=False)
+
+        # Majority vote per prompt position
+        n_prompts = len(prompts)
+        final_responses = []
+        for i in range(n_prompts):
+            candidates = [per_model_responses[k][i] for k in range(len(self.top_k_seeds))]
+            vote_counts = Counter(candidates)
+            winner = vote_counts.most_common(1)[0][0]
+            final_responses.append(winner)
+
+        return final_responses

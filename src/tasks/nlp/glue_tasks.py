@@ -323,6 +323,79 @@ class CoLATask(GLUETask):
         return {"mcc": mcc, "accuracy": accuracy}
 
 
+# ── SST-2 Task ────────────────────────────────────────────────────────────────
+
+@register_task("sst2")
+class SST2Task(GLUETask):
+    """
+    Stanford Sentiment Treebank v2 (SST-2) from GLUE.
+    Binary: negative (0) vs. positive (1) sentiment.
+    67,349 train sentences, 872 val sentences.
+    Primary metric: Accuracy ↑
+    Single-sentence input (no sentence2).
+    """
+    _task_name = "sst2"
+    _glue_config = "sst2"
+    _n_classes = 2
+    _label_key = "label"
+    _sent1_key = "sentence"
+    _sent2_key = None
+    _primary_metric = "accuracy"
+    _higher_is_better = True
+
+
+# ── MRPC Task ─────────────────────────────────────────────────────────────────
+
+@register_task("mrpc")
+class MRPCTask(GLUETask):
+    """
+    Microsoft Research Paraphrase Corpus (MRPC) from GLUE.
+    Binary: paraphrase (1) vs. not-paraphrase (0).
+    3,668 train pairs, 408 val pairs.
+    Primary metric: F1 ↑  (class-imbalanced, so F1 > accuracy)
+    """
+    _task_name = "mrpc"
+    _glue_config = "mrpc"
+    _n_classes = 2
+    _label_key = "label"
+    _sent1_key = "sentence1"
+    _sent2_key = "sentence2"
+    _primary_metric = "f1"
+    _higher_is_better = True
+
+    def _compute_metrics(self, preds: List[int], labels: List[int]) -> Dict[str, float]:
+        from sklearn.metrics import f1_score
+        f1 = f1_score(labels, preds, average="binary", zero_division=0)
+        accuracy = sum(p == l for p, l in zip(preds, labels)) / max(len(labels), 1)
+        return {"f1": float(f1), "accuracy": float(accuracy)}
+
+
+# ── QQP Task ──────────────────────────────────────────────────────────────────
+
+@register_task("qqp")
+class QQPTask(GLUETask):
+    """
+    Quora Question Pairs (QQP) from GLUE.
+    Binary: duplicate question pair (1) vs. not (0).
+    363,849 train pairs, 40,430 val pairs.
+    Primary metric: F1 ↑
+    """
+    _task_name = "qqp"
+    _glue_config = "qqp"
+    _n_classes = 2
+    _label_key = "label"
+    _sent1_key = "question1"
+    _sent2_key = "question2"
+    _primary_metric = "f1"
+    _higher_is_better = True
+
+    def _compute_metrics(self, preds: List[int], labels: List[int]) -> Dict[str, float]:
+        from sklearn.metrics import f1_score
+        f1 = f1_score(labels, preds, average="binary", zero_division=0)
+        accuracy = sum(p == l for p, l in zip(preds, labels)) / max(len(labels), 1)
+        return {"f1": float(f1), "accuracy": float(accuracy)}
+
+
 # ── STS-B Task ────────────────────────────────────────────────────────────────
 
 class STSBDataset(torch.utils.data.Dataset):

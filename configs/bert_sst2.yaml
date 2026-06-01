@@ -1,0 +1,40 @@
+# BERT-Large × SST-2 (Stanford Sentiment Treebank v2)
+# Binary sentiment: negative (0) vs. positive (1)
+# 67,349 train / 872 val — large dataset, good CF anchor
+
+model: bert_large
+task: sst2
+
+task_config:
+  max_length: 128
+  max_train_samples: null        # use all 67,349
+  max_val_samples: null          # use all 872
+  max_test_samples: null
+  batch_size: 32
+  num_workers: 2
+
+methods:
+  - linear_probe
+  - finetune
+  - randopt
+
+# Linear Probe config
+head_lr: 0.001
+head_epochs: 10
+weight_decay: 0.0001
+
+# Fine-tuning config
+lr_encoder: 0.00001
+lr_head: 0.001
+ft_epochs: 3
+max_grad_norm: 1.0
+
+# RandOpt config — paper-style sigma set Sigma
+sigma_set: [0.001, 0.003, 0.005, 0.01, 0.03]
+n_candidates: 100
+top_k: 5
+n_rounds: 1
+
+seed: 42
+device: auto
+output_dir: results/bert_sst2

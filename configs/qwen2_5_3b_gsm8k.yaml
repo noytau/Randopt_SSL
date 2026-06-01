@@ -1,0 +1,30 @@
+# Qwen2.5-3B-Instruct × GSM8K (grade-school math)
+# Neural Thickets paper Table 2 — multi-task generalization
+
+model: qwen2_5_3b
+task: gsm8k
+
+task_config:
+  max_train_samples: 500
+  max_val_samples: 200
+  max_test_samples: 500
+  batch_size: 4               # longer prompts than Countdown
+  num_workers: 0
+
+methods:
+  - passatone
+  - majority_vote
+  - sft
+  - randopt
+
+# RandOpt config
+sigma_set: [0.001, 0.003, 0.005, 0.01, 0.03]
+n_candidates: 3000
+top_k: 50
+n_rounds: 1
+
+max_new_tokens: 256           # GSM8K needs step-by-step reasoning
+
+seed: 42
+device: auto
+output_dir: results/qwen2_5_3b_gsm8k

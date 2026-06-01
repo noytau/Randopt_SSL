@@ -124,6 +124,7 @@ class SpeakerIDTask(Task):
         self._processor = None
         self._speaker_to_label: Dict[int, int] = {}
         self._n_speakers: int = DEFAULT_N_SPEAKERS
+        self._full_train_ds = None   # cached for carving val/test from train tail
 
     def name(self) -> str:
         return "speaker_id"
@@ -139,37 +140,42 @@ class SpeakerIDTask(Task):
         speaker_ids = sorted(set(ds["speaker_id"]))
         return {spk: idx for idx, spk in enumerate(speaker_ids)}
 
+    def _get_full_train(self):
+        """Load the full train.clean.100 split once; cache for carving."""
+        if self._full_train_ds is not None:
+            return self._full_train_ds
+        from datasets import load_dataset
+        logger.info(f"  Loading librispeech_asr/{self._subset} train.clean.100...")
+        ds = load_dataset("librispeech_asr", split="train.clean.100")
+        self._full_train_ds = ds
+        return ds
+
     def load_data(self, split: str = "train") -> DataLoader:
         if split in self._dataloaders:
             return self._dataloaders[split]
 
-        from datasets import load_dataset
+        # Carve val/test from the tail of train.clean.100 so all splits share
+        # the same speaker vocabulary (train.clean.100 and validation.clean have
+        # DIFFERENT speaker sets; carving avoids KeyError on unknown speaker IDs).
+        full = self._get_full_train()
+        n = len(full)
 
-        # train.clean.100 for train, validation.clean for val/test
-        split_map = {
-            "train": "train.clean.100",
-            "val": "validation.clean",
-            "test": "validation.clean",
-        }
-        hf_split = split_map[split]
+        n_val  = self._max_val  if self._max_val  else max(int(n * 0.05), 1)
+        n_test = self._max_test if self._max_test else max(int(n * 0.05), 1)
 
-        logger.info(f"  Loading librispeech_asr/{self._subset} {hf_split} (speaker ID)...")
-        ds = load_dataset(
-            "librispeech_asr",
-            split=hf_split,
-            
-        )
+        if split == "train":
+            ds = full.select(range(n - n_val - n_test))
+        elif split == "val":
+            ds = full.select(range(n - n_val - n_test, n - n_test))
+        else:  # test
+            ds = full.select(range(n - n_test, n))
+        logger.info(f"  Carved {split} from train.clean.100 tail: {len(ds)} samples.")
 
-        # Build speaker mapping from train on first call
-        if split == "train" and not self._speaker_to_label:
-            self._speaker_to_label = self._build_speaker_mapping(ds)
+        # Build speaker mapping from FULL train on first call (before carving)
+        if not self._speaker_to_label:
+            self._speaker_to_label = self._build_speaker_mapping(full)
             self._n_speakers = len(self._speaker_to_label)
             logger.info(f"  Speaker mapping built: {self._n_speakers} unique speakers.")
-
-        # If val/test loaded before train, build mapping from this split (fallback)
-        if not self._speaker_to_label:
-            self._speaker_to_label = self._build_speaker_mapping(ds)
-            self._n_speakers = len(self._speaker_to_label)
 
         max_s = {"train": self._max_train, "val": self._max_val, "test": self._max_test}.get(split)
         if max_s and len(ds) > max_s:

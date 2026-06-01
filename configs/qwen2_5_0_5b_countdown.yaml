@@ -1,0 +1,32 @@
+# Qwen2.5-0.5B-Instruct × Countdown (lightest, for dev/ablation)
+# Neural Thickets paper replication — smallest model scale
+
+model: qwen2_5_0_5b
+task: countdown
+
+task_config:
+  max_train_samples: 500         # paper uses full train; keep small for speed
+  max_val_samples: 200
+  max_test_samples: 500
+  batch_size: 8
+  num_workers: 0
+  use_synthetic: false           # try HuggingFace first, fall back to synthetic
+
+methods:
+  - passatone        # greedy decode, base model — minimum baseline
+  - majority_vote    # sample K responses, majority vote — equal compute, no weight diversity
+  - sft              # fine-tune on train data with gradients — the standard learning baseline
+  - randopt          # perturb weights, top-K ensemble — the paper's method
+
+# RandOpt config — paper: N=3000, K=50, sigma drawn from Sigma
+sigma_set: [0.001, 0.003, 0.005, 0.01, 0.03]
+n_candidates: 3000
+top_k: 50
+n_rounds: 1
+
+# Generation params
+max_new_tokens: 64               # Countdown answers are short expressions
+
+seed: 42
+device: auto
+output_dir: results/qwen2_5_0_5b_countdown

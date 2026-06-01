@@ -28,6 +28,13 @@ from pathlib import Path
 import torch
 import yaml
 
+# ── Optional WandB ──────────────────────────────────────────────────────────
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 # ── Force-import all modules so @register decorators fire ──────────────────
 # Audio
 import src.models.data2vec_audio               # noqa: F401
@@ -45,9 +52,15 @@ import src.models.dinov3                       # noqa: F401
 import src.tasks.vision.imagenet_cls           # noqa: F401
 import src.tasks.vision.segmentation           # noqa: F401
 import src.tasks.vision.depth_estimation       # noqa: F401
+# LLM (decoder models + generative tasks)
+import src.models.causal_lm                    # noqa: F401
+import src.tasks.llm.countdown                 # noqa: F401
+import src.tasks.llm.gsm8k                     # noqa: F401
 # Methods
 import src.baselines.linear_probe              # noqa: F401
 import src.baselines.finetune                  # noqa: F401
+import src.baselines.llm_baselines             # noqa: F401
+import src.baselines.sft_llm                   # noqa: F401
 import src.randopt.core                        # noqa: F401
 
 from src.interfaces import EvalResult
@@ -89,7 +102,11 @@ def parse_args():
                         help=f"Methods to compare. Available: {list(METHOD_REGISTRY.keys())}")
 
     # ── RandOpt params ──
-    parser.add_argument("--sigma", type=float, default=None)
+    parser.add_argument("--sigma", type=float, default=None,
+                        help="Single fixed σ for perturbation (backward compat).")
+    parser.add_argument("--sigma_set", nargs="+", type=float, default=None,
+                        help="Set Σ of σ values; each candidate draws σ ~ Uniform(Σ). "
+                             "Matches Neural Thickets paper. Example: --sigma_set 0.001 0.003 0.005 0.01 0.03")
     parser.add_argument("--n_candidates", type=int, default=None)
     parser.add_argument("--top_k", type=int, default=None)
     parser.add_argument("--n_rounds", type=int, default=None)
@@ -106,6 +123,10 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--list", action="store_true",
                         help="List available models, tasks, and methods.")
+    parser.add_argument("--no_wandb", action="store_true",
+                        help="Disable WandB logging (for local smoke tests).")
+    parser.add_argument("--wandb_project", type=str, default="randopt-benchmark",
+                        help="WandB project name.")
 
     return parser.parse_args()
 
@@ -121,9 +142,9 @@ def load_config(args) -> dict:
 
     # CLI overrides (only non-None values)
     for key in [
-        "model", "task", "methods", "sigma", "n_candidates", "top_k", "n_rounds",
+        "model", "task", "methods", "sigma", "sigma_set", "n_candidates", "top_k", "n_rounds",
         "head_lr", "head_epochs", "lr_encoder", "ft_epochs",
-        "device", "seed", "output_dir",
+        "device", "seed", "output_dir", "no_wandb", "wandb_project",
     ]:
         val = getattr(args, key, None)
         if val is not None:
@@ -189,6 +210,32 @@ def main():
     logger.info(f"  Output  : {output_dir}")
     logger.info("=" * 60)
 
+    # ── WandB init ──
+    use_wandb = WANDB_AVAILABLE and not config.get("no_wandb", False)
+    if use_wandb:
+        wandb_project = config.get("wandb_project", "randopt-benchmark")
+        sigma_display = config.get("sigma_set") or config.get("sigma")
+        wandb.init(
+            project=wandb_project,
+            name=f"{model_name}__{task_name}__seed{seed}",
+            config={
+                "model": model_name,
+                "task": task_name,
+                "methods": method_names,
+                "sigma": sigma_display,
+                "n_candidates": config.get("n_candidates"),
+                "top_k": config.get("top_k"),
+                "n_rounds": config.get("n_rounds"),
+                "seed": seed,
+            },
+            reinit=True,
+        )
+        logger.info(f"  WandB  : {wandb_project} / {wandb.run.name}")
+    elif not WANDB_AVAILABLE:
+        logger.info("  WandB  : not installed (pip install wandb to enable)")
+    else:
+        logger.info("  WandB  : disabled (--no_wandb)")
+
     # ── Load model ──
     logger.info(f"\n[1/4] Loading model: {model_name}")
     model_config = config.get("model_config", {})
@@ -235,9 +282,11 @@ def main():
         logger.info(f"  Evaluating on test set...")
         t0 = time.time()
 
-        # For RandOpt, pass the ensemble; for others, pass the model
-        from src.randopt.core import RandOptEnsemble
-        eval_model = encoder_or_ensemble if isinstance(encoder_or_ensemble, RandOptEnsemble) else model
+        # Use whatever adapt() returned as the eval model.
+        # If adapt() returned the original model object (linear_probe, finetune, sft, passatone),
+        # eval_model IS model. If it returned a wrapper (RandOptEnsemble, MajorityVoteWrapper),
+        # use that wrapper so its generate_ensemble() / generate() behaviour is exercised.
+        eval_model = encoder_or_ensemble if encoder_or_ensemble is not model else model
 
         test_metrics = task.evaluate(eval_model, head, test_loader, device)
         eval_time = time.time() - t0
@@ -257,6 +306,13 @@ def main():
         logger.info(f"  ✓ {result.summary()}")
         logger.info(f"    Adapt: {adapt_time:.1f}s, Eval: {eval_time:.1f}s")
 
+        # ── WandB log per-method result ──
+        if use_wandb and wandb.run:
+            log_dict = {f"{method_name}/{k}": v for k, v in test_metrics.items()}
+            log_dict[f"{method_name}/adapt_time_sec"] = adapt_time
+            log_dict[f"{method_name}/eval_time_sec"] = eval_time
+            wandb.log(log_dict)
+
         # Restore pretrained weights after each method
         model.get_encoder().load_state_dict(pretrained_state, strict=False)
 
@@ -268,6 +324,10 @@ def main():
     save_results_json(results, output_dir)
 
     logger.info(f"\n✓ All done! Results saved to {output_dir}/")
+
+    # ── WandB finish ──
+    if use_wandb and wandb.run:
+        wandb.finish()
 
 
 if __name__ == "__main__":
