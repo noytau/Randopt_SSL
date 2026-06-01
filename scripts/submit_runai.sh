@@ -5,10 +5,9 @@
 #   bash scripts/submit_runai.sh configs/bert_rte.yaml
 #   bash scripts/submit_runai.sh configs/qwen2_5_3b_countdown.yaml --gpu 2
 #
-# Requirements:
-#   - runai CLI configured (runai login)
-#   - PVC "noy-storage" mounted at /mnt5/noy on cluster
-#   - conda env "spectralfm" with all dependencies installed at /mnt5/noy
+# Storage:  on Geoffrey = /mnt5/noy/   inside container = /storage/noy/
+# Image:    noyhassid/spectralfm-lean:v6
+# Project:  raja
 
 set -e
 
@@ -18,7 +17,6 @@ if [ -z "$CONFIG" ]; then
     exit 1
 fi
 
-# Parse optional args
 GPU=1
 NO_WANDB=""
 shift
@@ -30,26 +28,27 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Derive job name from config file (e.g. bert_rte.yaml -> randopt-bert-rte)
 JOB_NAME="randopt-$(basename $CONFIG .yaml | tr '_' '-')"
-WORKDIR="/mnt5/noy/Randopt"
-CONFIG_PATH="${WORKDIR}/${CONFIG}"
+CONTAINER_WORKDIR="/storage/noy/Randopt"
+CONDA="/storage/noy/miniconda3/bin"
 
 echo "Submitting: $JOB_NAME"
-echo "  Config : $CONFIG_PATH"
+echo "  Config : $CONFIG"
 echo "  GPUs   : $GPU"
 echo "  WandB  : ${NO_WANDB:-enabled}"
 
 runai submit "$JOB_NAME" \
+    --project raja \
+    --image noyhassid/spectralfm-lean:v6 \
     --gpu "$GPU" \
-    --pvc noy-storage:/mnt5/noy \
-    --working-dir "$WORKDIR" \
-    --image nvcr.io/nvidia/pytorch:23.10-py3 \
+    --existing-pvc claimname=storage,path=/storage \
+    --working-dir "$CONTAINER_WORKDIR" \
+    --node-pools faculty,raja \
     --command -- bash -c "
-        export PATH=/mnt5/noy/miniconda3/bin:\$PATH
+        export PATH=${CONDA}:\$PATH
         source activate spectralfm
-        cd $WORKDIR
-        python3 -m scripts.run --config $CONFIG $NO_WANDB
+        cd ${CONTAINER_WORKDIR}
+        python3 -m scripts.run --config ${CONFIG} ${NO_WANDB}
     "
 
 echo "Submitted: $JOB_NAME"
