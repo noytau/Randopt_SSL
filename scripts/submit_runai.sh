@@ -7,8 +7,8 @@
 #
 # Requirements:
 #   - runai CLI configured (runai login)
-#   - PVC "noy-storage" mounted at /mnt/noy on cluster
-#   - conda env "spectralfm" with all dependencies installed at /mnt/noy
+#   - PVC "noy-storage" mounted at /mnt5/noy on cluster
+#   - conda env "spectralfm" with all dependencies installed at /mnt5/noy
 
 set -e
 
@@ -32,7 +32,7 @@ done
 
 # Derive job name from config file (e.g. bert_rte.yaml -> randopt-bert-rte)
 JOB_NAME="randopt-$(basename $CONFIG .yaml | tr '_' '-')"
-WORKDIR="/mnt/noy/Randopt"
+WORKDIR="/mnt5/noy/Randopt"
 CONFIG_PATH="${WORKDIR}/${CONFIG}"
 
 echo "Submitting: $JOB_NAME"
@@ -42,11 +42,11 @@ echo "  WandB  : ${NO_WANDB:-enabled}"
 
 runai submit "$JOB_NAME" \
     --gpu "$GPU" \
-    --pvc noy-storage:/mnt/noy \
+    --pvc noy-storage:/mnt5/noy \
     --working-dir "$WORKDIR" \
     --image nvcr.io/nvidia/pytorch:23.10-py3 \
     --command -- bash -c "
-        export PATH=/mnt/noy/miniconda3/bin:\$PATH
+        export PATH=/mnt5/noy/miniconda3/bin:\$PATH
         source activate spectralfm
         cd $WORKDIR
         python3 -m scripts.run --config $CONFIG $NO_WANDB
