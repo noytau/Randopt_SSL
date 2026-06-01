@@ -10,13 +10,20 @@
 
 set -euo pipefail
 
-# ── Resolve Python (conda env on spectralfm image, system python on randopt image) ──
-CONDA_PYTHON=/storage/noy/miniconda3/envs/spectralfm/bin/python3
+# ── Resolve Python ────────────────────────────────────────────────────────────
+# Priority: (1) shared conda on Lustre PVC  (2) system python
+CONDA_PYTHON=/storage/miniconda3/envs/spectralfm/bin/python3
 if [ -f "$CONDA_PYTHON" ]; then
-    export PATH=/storage/noy/miniconda3/envs/spectralfm/bin:/storage/noy/miniconda3/bin:$PATH
+    export PATH=/storage/miniconda3/envs/spectralfm/bin:/storage/miniconda3/bin:$PATH
+    echo "[setup] Using conda python: $CONDA_PYTHON"
+else
+    echo "[setup] Using system python: $(which python3 2>/dev/null || echo 'NOT FOUND')"
 fi
 
-# ── WandB auth from PVC key file (set --no_wandb on smoke tests below) ──────
+# ── Ensure required packages are installed ────────────────────────────────────
+python3 -m pip install --upgrade --quiet 'transformers>=4.44' datasets accelerate wandb scikit-learn 2>&1 | tail -3
+
+# ── WandB auth from PVC key file ──────────────────────────────────────────────
 WANDB_KEY_FILE=/storage/noy/.wandb_api_key
 if [ -f "$WANDB_KEY_FILE" ]; then
     export WANDB_API_KEY=$(cat "$WANDB_KEY_FILE")
