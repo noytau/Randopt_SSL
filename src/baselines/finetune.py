@@ -106,4 +106,4 @@ class FineTune(AdaptationMethod):
             head.load_state_dict(best_head_state)
 
         encoder.eval()
-        return encoder, head
+        return model, head

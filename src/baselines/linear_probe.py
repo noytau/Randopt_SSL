@@ -112,5 +112,4 @@ class LinearProbe(AdaptationMethod):
             "weight_decay": config.get("weight_decay", 1e-4),
         }
         head = train_linear_head(model, task, device, head_config)
-        encoder = model.get_encoder()
-        return encoder, head
+        return model, head
