@@ -8,7 +8,7 @@ task_config:
   max_train_samples: 500
   max_val_samples: 200
   max_test_samples: 500
-  batch_size: 4               # longer prompts than Countdown
+  batch_size: 8               # A5000/A6000 (24–48 GB): 3B fp16 ~6 GB + KV cache ~6 GB = ~12 GB, fits fine
   num_workers: 0
 
 methods:
