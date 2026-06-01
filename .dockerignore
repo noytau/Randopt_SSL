@@ -1,0 +1,10 @@
+# Don't bake source code or results into the image.
+# Everything runs off the PVC at runtime.
+.git
+results/
+tests/
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.ruff_cache/

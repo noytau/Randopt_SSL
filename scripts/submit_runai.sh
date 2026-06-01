@@ -30,7 +30,6 @@ done
 
 JOB_NAME="randopt-$(basename $CONFIG .yaml | tr '_' '-')"
 CONTAINER_WORKDIR="/storage/noy/Randopt"
-CONDA="/storage/noy/miniconda3/bin"
 
 echo "Submitting: $JOB_NAME"
 echo "  Config : $CONFIG"
@@ -39,14 +38,12 @@ echo "  WandB  : ${NO_WANDB:-enabled}"
 
 runai submit "$JOB_NAME" \
     --project raja \
-    --image noyhassid/spectralfm-lean:v6 \
+    --image noyhassid/randopt:v1 \
     --gpu "$GPU" \
     --existing-pvc claimname=storage,path=/storage \
     --working-dir "$CONTAINER_WORKDIR" \
     --node-pools faculty,raja \
     --command -- bash -c "
-        export PATH=${CONDA}:\$PATH
-        source activate spectralfm
         cd ${CONTAINER_WORKDIR}
         python3 -m scripts.run --config ${CONFIG} ${NO_WANDB}
     "
