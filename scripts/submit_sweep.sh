@@ -13,6 +13,10 @@
 
 STAGE=${1:-1}
 CONTAINER_WORKDIR="/storage/noy/Randopt"
+# WandB API key is stored once on the PVC (see setup instructions below).
+# Containers read it at startup — no manual login needed per-job.
+# To set up: echo "your-key" > /mnt5/noy/.wandb_api_key && chmod 600 /mnt5/noy/.wandb_api_key
+WANDB_KEY_FILE="/storage/noy/.wandb_api_key"
 
 submit() {
     local NAME=$1; shift
@@ -28,6 +32,7 @@ submit() {
         --working-dir "$CONTAINER_WORKDIR" \
         --node-pools faculty,raja \
         --command -- bash -c "
+            export WANDB_API_KEY=\$(cat ${WANDB_KEY_FILE} 2>/dev/null || echo '')
             cd ${CONTAINER_WORKDIR}
             python3 -m scripts.run --config ${CONFIG} ${EXTRA}
         "

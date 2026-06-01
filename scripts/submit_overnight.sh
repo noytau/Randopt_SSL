@@ -1,27 +1,30 @@
 #!/bin/bash
 # Submit the overnight Stage 1 + Stage 2 job to RunAI.
 #
-# Run this from Geoffrey AFTER the Docker image is pushed:
+# Prerequisites (one-time setup):
+#   echo "YOUR_WANDB_KEY" > /mnt5/noy/.wandb_api_key && chmod 600 /mnt5/noy/.wandb_api_key
+#
+# Run from Geoffrey:
 #   bash scripts/submit_overnight.sh
 #
-# Check progress:
+# Monitor:
 #   runai logs randopt-overnight -f
 #
-# See results in the morning:
-#   cat /mnt5/noy/Randopt/results/overnight.log
-#   cat /mnt5/noy/Randopt/results/stage2_dev/results.json
+# Results in the morning:
+#   tail -50 /mnt5/noy/Randopt/results/overnight.log
 
 set -e
 
 JOB_NAME="randopt-overnight"
-IMAGE="noyhassid/randopt:v1"
+IMAGE="noyhassid/spectralfm-lean:v6"   # use existing image until randopt:v1 is pushed
 WORKDIR="/storage/noy/Randopt"
+
+# Delete previous run if it exists
+runai delete job "$JOB_NAME" -p raja 2>/dev/null && sleep 3 || true
 
 echo "Submitting: $JOB_NAME"
 echo "  Image : $IMAGE"
-echo "  Stages: 1 (smoke N=20) → 2 (dev N=100)"
-echo "  Est.  : ~1 hour total"
-echo ""
+echo "  Stages: 1 (smoke N=20, ~15 min) → 2 (dev N=100, ~45 min)"
 
 runai submit "$JOB_NAME" \
     --project raja \
@@ -30,11 +33,11 @@ runai submit "$JOB_NAME" \
     --existing-pvc claimname=storage,path=/storage \
     --working-dir "$WORKDIR" \
     --node-pools faculty,raja \
-    --command -- bash scripts/run_overnight.sh
+    --command -- bash "$WORKDIR/scripts/run_overnight.sh"
 
 echo ""
-echo "Submitted. Monitor with:"
+echo "Submitted. Watch with:"
 echo "  runai logs $JOB_NAME -f"
 echo ""
-echo "In the morning, check results:"
-echo "  cat /mnt5/noy/Randopt/results/overnight.log | tail -40"
+echo "In the morning:"
+echo "  tail -50 /mnt5/noy/Randopt/results/overnight.log"

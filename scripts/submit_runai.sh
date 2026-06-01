@@ -44,6 +44,8 @@ runai submit "$JOB_NAME" \
     --working-dir "$CONTAINER_WORKDIR" \
     --node-pools faculty,raja \
     --command -- bash -c "
+        [ -f /storage/noy/.wandb_api_key ] && export WANDB_API_KEY=\$(cat /storage/noy/.wandb_api_key)
+        [ -f /storage/noy/miniconda3/envs/spectralfm/bin/python3 ] && export PATH=/storage/noy/miniconda3/envs/spectralfm/bin:/storage/noy/miniconda3/bin:\$PATH
         cd ${CONTAINER_WORKDIR}
         python3 -m scripts.run --config ${CONFIG} ${NO_WANDB}
     "
