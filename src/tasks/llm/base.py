@@ -35,6 +35,8 @@ class GenerativeTask(Task):
     No linear head — the model IS the predictor.
     """
 
+    max_new_tokens: int = 256   # overridden by run.py from config["max_new_tokens"]
+
     def build_head(self, input_dim: int, device: torch.device) -> nn.Module:
         """LLMs don't need a head; return a no-op Identity module."""
         return nn.Identity().to(device)
@@ -80,10 +82,11 @@ class GenerativeTask(Task):
             samples: List[Dict] = batch["samples"]   # raw sample dicts for verify()
 
             # Duck typing: RandOptEnsemble has generate_ensemble(), everything else has generate()
+            gen_kwargs = {"max_new_tokens": self.max_new_tokens}
             if isinstance(model, RandOptEnsemble):
-                responses = model.generate_ensemble(prompts)
+                responses = model.generate_ensemble(prompts, **gen_kwargs)
             elif hasattr(model, "generate"):
-                responses = model.generate(prompts)
+                responses = model.generate(prompts, **gen_kwargs)
             else:
                 raise TypeError(
                     f"GenerativeTask.evaluate() requires a model with generate() method, "

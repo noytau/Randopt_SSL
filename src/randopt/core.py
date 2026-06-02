@@ -226,7 +226,7 @@ class RandOptEnsemble(nn.Module):
 
         return torch.stack(all_features).mean(dim=0)
 
-    def generate_ensemble(self, prompts: List[str]) -> List[str]:
+    def generate_ensemble(self, prompts: List[str], **generate_kwargs) -> List[str]:
         """
         Generate responses from K perturbed LLMs, return majority-vote answer per prompt.
 
@@ -246,7 +246,7 @@ class RandOptEnsemble(nn.Module):
             perturbed = self.sampler.apply(self.reference_state, eps)
             encoder.load_state_dict(perturbed, strict=False)
 
-            responses = self.model.generate(prompts)
+            responses = self.model.generate(prompts, **generate_kwargs)
             per_model_responses.append(responses)
 
         # Restore original weights

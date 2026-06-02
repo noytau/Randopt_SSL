@@ -73,7 +73,7 @@ class MajorityVoteWrapper(nn.Module):
         self.n_samples = n_samples
         self.temperature = temperature
 
-    def generate(self, prompts: List[str]) -> List[str]:
+    def generate(self, prompts: List[str], **kwargs) -> List[str]:
         """Generate n_samples responses per prompt, return majority vote."""
         per_run: List[List[str]] = []
         for _ in range(self.n_samples):
@@ -81,6 +81,7 @@ class MajorityVoteWrapper(nn.Module):
                 prompts,
                 temperature=self.temperature,
                 do_sample=True,
+                **kwargs,
             )
             per_run.append(responses)
 
@@ -92,9 +93,8 @@ class MajorityVoteWrapper(nn.Module):
             results.append(winner)
         return results
 
-    # Forward compatibility with GenerativeTask.evaluate()
-    def generate_ensemble(self, prompts: List[str]) -> List[str]:
-        return self.generate(prompts)
+    def generate_ensemble(self, prompts: List[str], **kwargs) -> List[str]:
+        return self.generate(prompts, **kwargs)
 
 
 @register_method("majority_vote")

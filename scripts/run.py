@@ -253,6 +253,10 @@ def main():
     if hasattr(task, "set_tokenizer") and hasattr(model, "get_tokenizer"):
         task.set_tokenizer(model.get_tokenizer())
 
+    # Propagate generation config to generative tasks
+    if hasattr(task, "max_new_tokens") and config.get("max_new_tokens"):
+        task.max_new_tokens = config["max_new_tokens"]
+
     # Pre-load data
     task.load_data("train")
     task.load_data("val")
