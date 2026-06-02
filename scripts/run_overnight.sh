@@ -4,10 +4,11 @@
 # Runs Stage 1 (smoke, N=20, ~15 min) then Stage 2 (dev, N=100, ~45 min).
 # Stage 2 only starts if Stage 1 exits cleanly.
 #
-# Paths:
-#   Code      : /opt/randopt   (baked into the image)
-#   Results   : /storage/noy/Randopt/results/  (Lustre PVC — persists)
+# Filesystem note:
+#   Code      : /opt/randopt              (baked into image — no sync with Geoffrey)
+#   Results   : /storage/noy/Randopt/results/  (Lustre PVC, persists across jobs)
 #   HF cache  : /storage/noy/.cache/huggingface  (set via HF_HOME in image)
+#   WandB key : /storage/noy/.wandb_api_key      (must be set up on PVC once)
 
 set -euo pipefail
 
@@ -17,10 +18,9 @@ LOG=$RESULTS_DIR/overnight.log
 
 mkdir -p "$RESULTS_DIR"
 
-# ── WandB auth from PVC key file (optional — Stage 1 & 2 use --no_wandb) ─────
-WANDB_KEY_FILE=/storage/noy/.wandb_api_key
-if [ -f "$WANDB_KEY_FILE" ]; then
-    export WANDB_API_KEY=$(cat "$WANDB_KEY_FILE")
+# ── WandB auth from PVC key file ──────────────────────────────────────────────
+if [ -f /storage/noy/.wandb_api_key ]; then
+    export WANDB_API_KEY=$(cat /storage/noy/.wandb_api_key)
 fi
 
 log() {
@@ -31,7 +31,7 @@ log "========================================================"
 log "  Randopt overnight run"
 log "========================================================"
 log "  Host   : $(hostname)"
-log "  Python : $(which python3) [$(python3 --version)]"
+log "  Python : $(which python3) [$(python3 --version 2>&1)]"
 log "  GPU    : $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo 'none')"
 log "  VRAM   : $(nvidia-smi --query-gpu=memory.total --format=csv,noheader 2>/dev/null | head -1 || echo 'n/a')"
 log "  Code   : $CODE_DIR"
@@ -67,19 +67,17 @@ log "Stage 2 PASSED ✓"
 # ── Summary ──────────────────────────────────────────────────────────────────
 log ""
 log "========================================================"
-log "  All done. Results:"
-log "    Stage 1 : $RESULTS_DIR/stage1_smoke/results.json"
-log "    Stage 2 : $RESULTS_DIR/stage2_dev/results.json"
+log "  All done. Results in $RESULTS_DIR"
 log "========================================================"
 log ""
 log "Quick view:"
 python3 - <<'PYEOF' 2>&1 | tee -a "$LOG"
-import json, pathlib, os
-results_dir = os.environ.get('RESULTS_DIR', '/storage/noy/Randopt/results')
+import json, pathlib
+results_dir = pathlib.Path('/storage/noy/Randopt/results')
 for stage, subdir in [('Stage 1 (N=20)', 'stage1_smoke'), ('Stage 2 (N=100)', 'stage2_dev')]:
-    p = pathlib.Path(results_dir) / subdir / 'results.json'
+    p = results_dir / subdir / 'results.json'
     if not p.exists():
-        print(f'{stage}: no results.json found at {p}')
+        print(f'{stage}: no results.json found')
         continue
     data = json.load(open(p))
     print(f'\n{stage}:')

@@ -1,14 +1,16 @@
 # Randopt Benchmark — Docker image
 #
-# Built for: Qwen2.5 LLM experiments (Countdown, GSM8K, MBPP)
+# Provides Python + all packages for Qwen2.5 LLM experiments.
+# Code lives on the shared filesystem at /storage/noy/Randopt (= Geoffrey /mnt5/noy/Randopt).
 #
-# Build & push (from repo root — code is baked into the image):
+# Build & push:
 #   docker build -t noyhassid/randopt:v1 .
 #   docker push noyhassid/randopt:v1
 #
 # RunAI usage:
-#   --image noyhassid/randopt:v1  --working-dir /opt/randopt
-#   HF model cache and results go to PVC: /storage/noy/
+#   --image noyhassid/randopt:v1  --working-dir /storage/noy/Randopt
+#   --existing-pvc claimname=storage,path=/storage
+#   Results → /storage/noy/Randopt/results/   HF cache → /storage/noy/.cache/huggingface
 
 FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 
@@ -64,14 +66,14 @@ RUN pip install --no-cache-dir \
     "numpy>=1.24"
 
 # ── Copy source code into the image ─────────────────────────────────────────
-# .dockerignore excludes: .git, results/, __pycache__, *.pyc, .ruff_cache
+# Geoffrey /mnt5/noy/Randopt and container /storage/noy/Randopt are SEPARATE
+# filesystems with no automatic sync. Code must travel with the image.
+# Rebuild image after code changes: docker build -t noyhassid/randopt:v1 . && docker push
 COPY . /opt/randopt/
 
-# ── Register the package without re-installing its deps ─────────────────────
-# (all deps already installed above; torchaudio/jiwer skipped for lean LLM image)
+# ── Register the package (deps already installed above) ─────────────────────
 RUN pip install --no-cache-dir --no-deps -e /opt/randopt/
 
-# ── Default working directory ────────────────────────────────────────────────
 WORKDIR /opt/randopt
 
 CMD ["/bin/bash"]

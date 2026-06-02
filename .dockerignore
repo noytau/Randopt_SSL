@@ -1,12 +1,9 @@
-# Exclude large/generated files from image build context.
-# Source code IS baked in (src/, configs/, scripts/).
+# Exclude from Docker build context (code is NOT baked in — lives on shared filesystem).
 .git
 results/
+tests/
 *.pyc
 __pycache__/
 .pytest_cache/
 *.egg-info/
 .ruff_cache/
-.env
-*.wandb_api_key
-*.github_token
