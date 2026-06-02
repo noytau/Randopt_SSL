@@ -1,8 +1,10 @@
 #!/bin/bash
 # Submit the full experiment sweep in stages.
 #
-# Prerequisite: image noyhassid/randopt:v1 must be built and pushed.
-#   cd ~/PycharmProjects/Randopt && docker build -t noyhassid/randopt:v1 . && docker push noyhassid/randopt:v1
+# Prerequisites:
+#   1. Code on Lustre PVC at /storage/noy/Randopt/ (push to GitHub, then update_cluster_code.sh)
+#   2. Image noyhassid/randopt:v1 built and pushed (packages only):
+#        cd ~/PycharmProjects/Randopt && docker build -t noyhassid/randopt:v1 . && docker push noyhassid/randopt:v1
 #
 # Stages:
 #   1 = smoke tests   (Qwen2.5-0.5B × Countdown, N=20, no WandB)
@@ -10,14 +12,14 @@
 #   3 = full paper    (Qwen2.5 0.5B/1.5B/3B × Countdown, N=3000, K=50)
 #   4 = GSM8K         (Qwen2.5-3B × GSM8K, N=3000, K=50)
 #
-# Code: baked into image at /opt/randopt
+# Code:    /storage/noy/Randopt/  (Lustre PVC)
 # Results: /storage/noy/Randopt/results/ (Lustre PVC)
 # Image:   noyhassid/randopt:v1
 # Project: raja
 
 STAGE=${1:-1}
-CODE_DIR="/opt/randopt"
-RESULTS_BASE="/storage/noy/Randopt/results"
+WORKDIR="/storage/noy/Randopt"
+RESULTS_BASE="$WORKDIR/results"
 WANDB_KEY_FILE="/storage/noy/.wandb_api_key"
 
 submit() {
@@ -31,11 +33,10 @@ submit() {
         --image noyhassid/randopt:v1 \
         --gpu "$GPU" \
         --existing-pvc claimname=storage,path=/storage \
-        --working-dir "$CODE_DIR" \
+        --working-dir "$WORKDIR" \
         --node-pools faculty,raja \
         --command -- bash -c "
             [ -f ${WANDB_KEY_FILE} ] && export WANDB_API_KEY=\$(cat ${WANDB_KEY_FILE})
-            cd ${CODE_DIR}
             python3 -m scripts.run --config ${CONFIG} ${EXTRA}
         "
     echo "  Submitted: $NAME"

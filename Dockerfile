@@ -65,15 +65,9 @@ RUN pip install --no-cache-dir \
     "pyyaml>=6.0" \
     "numpy>=1.24"
 
-# ── Copy source code into the image ─────────────────────────────────────────
-# Geoffrey /mnt5/noy/Randopt and container /storage/noy/Randopt are SEPARATE
-# filesystems with no automatic sync. Code must travel with the image.
-# Rebuild image after code changes: docker build -t noyhassid/randopt:v1 . && docker push
-COPY . /opt/randopt/
-
-# ── Register the package (deps already installed above) ─────────────────────
-RUN pip install --no-cache-dir --no-deps -e /opt/randopt/
-
-WORKDIR /opt/randopt
+# ── No code baked in — code lives on Lustre PVC at /storage/noy/Randopt/ ────
+# Update code on cluster: bash /mnt5/noy/Randopt/scripts/update_cluster_code.sh
+# RunAI jobs use --working-dir /storage/noy/Randopt
+WORKDIR /workspace
 
 CMD ["/bin/bash"]

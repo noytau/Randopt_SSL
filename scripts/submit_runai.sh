@@ -2,14 +2,16 @@
 # Submit a single RandOpt experiment to the RunAI cluster.
 #
 # Prerequisites:
-#   Image noyhassid/randopt:v1 must be built and pushed:
-#     cd ~/PycharmProjects/Randopt && docker build -t noyhassid/randopt:v1 . && docker push noyhassid/randopt:v1
+#   1. Code on Lustre PVC at /storage/noy/Randopt/ (push to GitHub, then update_cluster_code.sh)
+#   2. Image noyhassid/randopt:v1 built and pushed (packages only, no code):
+#        cd ~/PycharmProjects/Randopt && docker build -t noyhassid/randopt:v1 . && docker push noyhassid/randopt:v1
 #
 # Usage:
 #   bash scripts/submit_runai.sh configs/qwen2_5_0_5b_countdown.yaml
 #   bash scripts/submit_runai.sh configs/qwen2_5_3b_gsm8k.yaml --gpu 2
+#   bash scripts/submit_runai.sh configs/qwen2_5_0_5b_countdown.yaml --gpu 1 --no_wandb
 #
-# Code:    baked into image at /opt/randopt
+# Code:    /storage/noy/Randopt/  (Lustre PVC)
 # Results: /storage/noy/Randopt/results/  (Lustre PVC, persists)
 # Image:   noyhassid/randopt:v1
 # Project: raja
@@ -33,24 +35,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-JOB_NAME="randopt-$(basename $CONFIG .yaml | tr '_' '-')"
-CODE_DIR="/opt/randopt"
+JOB_NAME="randopt-$(basename "$CONFIG" .yaml | tr '_' '-')"
+WORKDIR="/storage/noy/Randopt"
 
 echo "Submitting: $JOB_NAME"
 echo "  Config : $CONFIG"
 echo "  GPUs   : $GPU"
 echo "  WandB  : ${NO_WANDB:-enabled}"
+echo "  Code   : $WORKDIR"
 
 runai submit "$JOB_NAME" \
     --project raja \
     --image noyhassid/randopt:v1 \
     --gpu "$GPU" \
     --existing-pvc claimname=storage,path=/storage \
-    --working-dir "$CODE_DIR" \
+    --working-dir "$WORKDIR" \
     --node-pools faculty,raja \
     --command -- bash -c "
         [ -f /storage/noy/.wandb_api_key ] && export WANDB_API_KEY=\$(cat /storage/noy/.wandb_api_key)
-        cd ${CODE_DIR}
         python3 -m scripts.run --config ${CONFIG} ${NO_WANDB}
     "
 
