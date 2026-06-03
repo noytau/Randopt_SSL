@@ -86,18 +86,35 @@ class SupervisedFineTune(AdaptationMethod):
             lm.gradient_checkpointing_enable()
             logger.info("  Gradient checkpointing enabled.")
 
+        # ── Dtype: cast FP16 → BF16 for training stability ──────────────────
+        # FP16 has a max value of ~65 504; gradient norms routinely exceed that,
+        # causing overflow → NaN loss.  BF16 keeps FP32's 8-exponent-bit range
+        # so it never overflows, while still fitting in half the memory of FP32.
+        # We cast back to the original dtype after training completes.
+        first_param_dtype = next(lm.parameters()).dtype
+        cast_to_bf16 = (
+            first_param_dtype == torch.float16
+            and device.type == "cuda"
+            and torch.cuda.is_bf16_supported()
+        )
+        if cast_to_bf16:
+            lm = lm.to(torch.bfloat16)
+            logger.info("  SFT dtype: FP16 → BF16 (avoids gradient overflow / NaN loss).")
+        training_dtype = next(lm.parameters()).dtype
+
         # ── Optimizer ──
         optimizer = torch.optim.AdamW(lm.parameters(), lr=lr, weight_decay=0.01)
 
-        # GradScaler only works when model parameters are FP32 — calling
-        # unscale_() on FP16 parameters raises ValueError.  Our models are
-        # loaded in FP16 by default, so we skip the scaler in that case.
-        # The forward pass still runs in native FP16 (no autocast needed).
-        first_param_dtype = next(lm.parameters()).dtype
-        use_amp = device.type == "cuda" and first_param_dtype == torch.float32
+        # GradScaler only makes sense with FP32 parameters + FP16 compute.
+        # For BF16 / FP16 parameters we skip it — BF16 can't overflow and
+        # FP16-param training is handled by the cast above.
+        use_amp = device.type == "cuda" and training_dtype == torch.float32
         scaler = torch.cuda.amp.GradScaler() if use_amp else None
         amp_dtype = torch.bfloat16 if (use_amp and torch.cuda.is_bf16_supported()) else torch.float16
-        logger.info(f"  SFT AMP: use_amp={use_amp}, model_dtype={first_param_dtype}, scaler={'yes' if scaler else 'no'}")
+        logger.info(
+            f"  SFT AMP: use_amp={use_amp}, training_dtype={training_dtype}, "
+            f"scaler={'yes' if scaler else 'no'}"
+        )
 
         # ── Training loop ──
         total_steps = 0
@@ -162,6 +179,11 @@ class SupervisedFineTune(AdaptationMethod):
         lm.eval()
         if hasattr(lm, "gradient_checkpointing_disable"):
             lm.gradient_checkpointing_disable()
+
+        # Restore original dtype for inference (keeps downstream evaluation consistent)
+        if cast_to_bf16:
+            lm = lm.to(first_param_dtype)
+            logger.info(f"  SFT dtype: BF16 → {first_param_dtype} (restored for inference).")
 
         # Return the fine-tuned model directly (no separate head)
         head = task.build_head(1, device)

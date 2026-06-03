@@ -216,36 +216,74 @@ class CountdownTask(GenerativeTask):
         return _generate_synthetic(n, seed=self._seed + seed_offset)
 
     def _load_hf(self, split: str, max_s: Optional[int]) -> List[Dict]:
-        """Load Countdown problems from allenai/tulu-3-sft-mixture."""
+        """
+        Load Countdown problems from allenai/tulu-3-sft-mixture.
+
+        tulu-3 has a single "default" config (no "countdown" sub-config).
+        We stream the dataset and filter rows where item["dataset"] == "countdown".
+        All three splits are carved from the filtered items on the first call and
+        cached on the task object so subsequent calls don't re-download.
+        """
         from datasets import load_dataset
 
-        logger.info(f"  Loading allenai/tulu-3-sft-mixture (countdown, split={split})...")
-        # tulu-3 is a single-split dataset; we carve train/val/test manually
-        ds = load_dataset("allenai/tulu-3-sft-mixture", "countdown", split="train")
+        if not hasattr(self, "_hf_cache"):
+            # How many countdown samples to collect before stopping the stream.
+            # Grab enough for all three splits plus a safety margin.
+            n_target = (
+                (self._max_train or 1000)
+                + (self._max_val or 200)
+                + (self._max_test or 500)
+                + 200  # margin
+            )
+            logger.info(
+                f"  Streaming allenai/tulu-3-sft-mixture (default config, "
+                f"filtering 'countdown' items, want ≥{n_target})…"
+            )
+            ds = load_dataset(
+                "allenai/tulu-3-sft-mixture",
+                split="train",
+                streaming=True,
+                trust_remote_code=True,
+            )
 
-        # Filter to countdown problems only (in case dataset has mixed content)
-        # tulu-3 countdown items have "messages" format: [{role, content}, ...]
-        samples = []
-        for item in ds:
-            parsed = self._parse_tulu_item(item)
-            if parsed:
-                samples.append(parsed)
+            all_samples: List[Dict] = []
+            for item in ds:
+                # The 'dataset' column identifies the source task
+                src = (item.get("dataset") or item.get("source") or "").lower()
+                if "countdown" not in src:
+                    continue
+                parsed = self._parse_tulu_item(item)
+                if parsed:
+                    all_samples.append(parsed)
+                if len(all_samples) >= n_target:
+                    break
 
-        # Deterministic split: 80% train, 10% val, 10% test
-        n_total = len(samples)
-        rng = random.Random(self._seed)
-        rng.shuffle(samples)
-        n_val = max(100, n_total // 10)
-        n_test = max(200, n_total // 10)
-        split_data = {
-            "train": samples[n_val + n_test:],
-            "val": samples[:n_val],
-            "test": samples[n_val:n_val + n_test],
-        }
-        chosen = split_data.get(split, split_data["train"])
+            if not all_samples:
+                raise RuntimeError(
+                    "No countdown items found in allenai/tulu-3-sft-mixture. "
+                    "Check the 'dataset' column name in the HF hub card."
+                )
+
+            # Deterministic train / val / test split
+            rng = random.Random(self._seed)
+            rng.shuffle(all_samples)
+            n_total = len(all_samples)
+            n_val  = max(100, n_total // 10)
+            n_test = max(200, n_total // 10)
+            self._hf_cache: Dict[str, List[Dict]] = {
+                "train": all_samples[n_val + n_test:],
+                "val":   all_samples[:n_val],
+                "test":  all_samples[n_val: n_val + n_test],
+            }
+            logger.info(
+                f"  HF cache built: train={len(self._hf_cache['train'])}, "
+                f"val={len(self._hf_cache['val'])}, test={len(self._hf_cache['test'])}"
+            )
+
+        chosen = self._hf_cache.get(split, self._hf_cache["train"])
         if max_s and len(chosen) > max_s:
             chosen = chosen[:max_s]
-        logger.info(f"  {len(chosen)} samples in {split} split.")
+        logger.info(f"  {len(chosen)} samples selected for {split} split.")
         return chosen
 
     def _parse_tulu_item(self, item: Dict) -> Optional[Dict]:
