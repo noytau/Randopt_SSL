@@ -89,10 +89,15 @@ class SupervisedFineTune(AdaptationMethod):
         # ── Optimizer ──
         optimizer = torch.optim.AdamW(lm.parameters(), lr=lr, weight_decay=0.01)
 
-        # Mixed precision scaler (fp16 on CUDA, disabled on MPS/CPU)
-        use_amp = device.type == "cuda"
+        # GradScaler only works when model parameters are FP32 — calling
+        # unscale_() on FP16 parameters raises ValueError.  Our models are
+        # loaded in FP16 by default, so we skip the scaler in that case.
+        # The forward pass still runs in native FP16 (no autocast needed).
+        first_param_dtype = next(lm.parameters()).dtype
+        use_amp = device.type == "cuda" and first_param_dtype == torch.float32
         scaler = torch.cuda.amp.GradScaler() if use_amp else None
         amp_dtype = torch.bfloat16 if (use_amp and torch.cuda.is_bf16_supported()) else torch.float16
+        logger.info(f"  SFT AMP: use_amp={use_amp}, model_dtype={first_param_dtype}, scaler={'yes' if scaler else 'no'}")
 
         # ── Training loop ──
         total_steps = 0
