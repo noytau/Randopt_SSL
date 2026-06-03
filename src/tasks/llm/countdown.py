@@ -143,10 +143,16 @@ def _solve_countdown(nums: List[int], target: int) -> Optional[str]:
     ops = ['+', '-', '*', '/']
 
     def apply(a: float, b: float, op: str) -> Optional[float]:
-        if op == '/' and abs(b) < 1e-9:
-            return None
-        v = {'+':(a+b), '-':(a-b), '*':(a*b), '/':(a/b)}[op]
-        return v
+        # NOTE: do NOT use a dict literal here — Python evaluates all values
+        # eagerly, so {... '/':(a/b)} raises ZeroDivisionError before the guard.
+        if op == '+': return a + b
+        if op == '-': return a - b
+        if op == '*': return a * b
+        if op == '/':
+            if abs(b) < 1e-9:
+                return None
+            return a / b
+        return None
 
     # For n numbers, build all possible expression trees.
     # We use a recursive approach: pick two values, combine, recurse.
