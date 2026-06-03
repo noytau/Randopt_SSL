@@ -101,6 +101,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s │ %(levelname)-7s │ %(message)s",
     datefmt="%H:%M:%S",
+    force=True,  # override any handlers set by early logging.warning() calls during imports
 )
 logger = logging.getLogger(__name__)
 

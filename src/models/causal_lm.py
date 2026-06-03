@@ -53,6 +53,9 @@ class CausalLMModel(SSLModel):
         self._tokenizer = AutoTokenizer.from_pretrained(self._model_id, trust_remote_code=True)
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
+        # Decoder-only models must use left-padding so all prompts in a batch
+        # end at the same position before generation begins.
+        self._tokenizer.padding_side = "left"
 
         self._model = AutoModelForCausalLM.from_pretrained(
             self._model_id,
