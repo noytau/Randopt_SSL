@@ -221,8 +221,6 @@ class SupervisedFineTune(AdaptationMethod):
         # Mask padding tokens from loss too
         labels[attention_mask == 0] = -100
 
-        ctx = torch.autocast(device_type=device.type, dtype=amp_dtype) if use_amp else torch.no_grad.__class__()
-        # Use autocast for forward, not no_grad (we need gradients)
         if use_amp:
             with torch.autocast(device_type=device.type, dtype=amp_dtype):
                 outputs = lm(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
