@@ -36,32 +36,54 @@ except ImportError:
     WANDB_AVAILABLE = False
 
 # ── Force-import all modules so @register decorators fire ──────────────────
-# Audio
-import src.models.data2vec_audio               # noqa: F401
-import src.tasks.audio.asr                     # noqa: F401
-import src.tasks.audio.keyword_spotting        # noqa: F401
-import src.tasks.audio.speaker_id              # noqa: F401
-import src.tasks.audio.emotion_recognition     # noqa: F401
-import src.tasks.audio.intent_classification   # noqa: F401
-# NLP
-import src.models.bert_large                   # noqa: F401
-import src.tasks.nlp.glue_tasks                # noqa: F401
-import src.tasks.nlp.squad                     # noqa: F401
-# Vision
-import src.models.dinov3                       # noqa: F401
-import src.tasks.vision.imagenet_cls           # noqa: F401
-import src.tasks.vision.segmentation           # noqa: F401
-import src.tasks.vision.depth_estimation       # noqa: F401
-# LLM (decoder models + generative tasks)
-import src.models.causal_lm                    # noqa: F401
-import src.tasks.llm.countdown                 # noqa: F401
-import src.tasks.llm.gsm8k                     # noqa: F401
-# Methods
-import src.baselines.linear_probe              # noqa: F401
-import src.baselines.finetune                  # noqa: F401
-import src.baselines.llm_baselines             # noqa: F401
-import src.baselines.sft_llm                   # noqa: F401
-import src.randopt.core                        # noqa: F401
+# Each group is wrapped in try/except so missing optional deps (e.g.
+# soundfile for audio, timm for vision) don't block other modalities.
+
+# Audio (requires soundfile / torchaudio — optional)
+try:
+    import src.models.data2vec_audio               # noqa: F401
+    import src.tasks.audio.asr                     # noqa: F401
+    import src.tasks.audio.keyword_spotting        # noqa: F401
+    import src.tasks.audio.speaker_id              # noqa: F401
+    import src.tasks.audio.emotion_recognition     # noqa: F401
+    import src.tasks.audio.intent_classification   # noqa: F401
+except Exception as _e:
+    logging.warning(f"Audio modules skipped (missing deps): {_e}")
+
+# NLP (requires transformers — always available)
+try:
+    import src.models.bert_large                   # noqa: F401
+    import src.tasks.nlp.glue_tasks                # noqa: F401
+    import src.tasks.nlp.squad                     # noqa: F401
+except Exception as _e:
+    logging.warning(f"NLP modules skipped (missing deps): {_e}")
+
+# Vision (requires timm / torchvision — optional)
+try:
+    import src.models.dinov3                       # noqa: F401
+    import src.tasks.vision.imagenet_cls           # noqa: F401
+    import src.tasks.vision.segmentation           # noqa: F401
+    import src.tasks.vision.depth_estimation       # noqa: F401
+except Exception as _e:
+    logging.warning(f"Vision modules skipped (missing deps): {_e}")
+
+# LLM (decoder models + generative tasks — always available)
+try:
+    import src.models.causal_lm                    # noqa: F401
+    import src.tasks.llm.countdown                 # noqa: F401
+    import src.tasks.llm.gsm8k                     # noqa: F401
+except Exception as _e:
+    logging.warning(f"LLM modules skipped (missing deps): {_e}")
+
+# Methods (always available)
+try:
+    import src.baselines.linear_probe              # noqa: F401
+    import src.baselines.finetune                  # noqa: F401
+    import src.baselines.llm_baselines             # noqa: F401
+    import src.baselines.sft_llm                   # noqa: F401
+    import src.randopt.core                        # noqa: F401
+except Exception as _e:
+    logging.warning(f"Method modules skipped (missing deps): {_e}")
 
 from src.interfaces import EvalResult
 from src.registry import (
