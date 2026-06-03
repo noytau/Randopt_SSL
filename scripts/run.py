@@ -238,22 +238,26 @@ def main():
     if use_wandb:
         wandb_project = config.get("wandb_project", "randopt-benchmark")
         sigma_display = config.get("sigma_set") or config.get("sigma")
-        wandb.init(
-            project=wandb_project,
-            name=f"{model_name}__{task_name}__seed{seed}",
-            config={
-                "model": model_name,
-                "task": task_name,
-                "methods": method_names,
-                "sigma": sigma_display,
-                "n_candidates": config.get("n_candidates"),
-                "top_k": config.get("top_k"),
-                "n_rounds": config.get("n_rounds"),
-                "seed": seed,
-            },
-            reinit=True,
-        )
-        logger.info(f"  WandB  : {wandb_project} / {wandb.run.name}")
+        try:
+            wandb.init(
+                project=wandb_project,
+                name=f"{model_name}__{task_name}__seed{seed}",
+                config={
+                    "model": model_name,
+                    "task": task_name,
+                    "methods": method_names,
+                    "sigma": sigma_display,
+                    "n_candidates": config.get("n_candidates"),
+                    "top_k": config.get("top_k"),
+                    "n_rounds": config.get("n_rounds"),
+                    "seed": seed,
+                },
+                reinit=True,
+            )
+            logger.info(f"  WandB  : {wandb_project} / {wandb.run.name}")
+        except Exception as e:
+            logger.warning(f"  WandB  : init failed ({e}) — continuing without logging.")
+            use_wandb = False
     elif not WANDB_AVAILABLE:
         logger.info("  WandB  : not installed (pip install wandb to enable)")
     else:
