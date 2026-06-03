@@ -7,8 +7,11 @@ Each input number may be used at most once.
 
 Verifier: parse the model's expression, eval() it safely, check == target.
 
-Dataset: allenai/tulu-3-sft-mixture (countdown split) — 100K+ problems.
+Dataset: Jiayi-Pan/Countdown-Tasks-3to4 — dedicated countdown benchmark, 3–4 numbers.
 Fallback: synthetic generation (random numbers + guaranteed-solvable targets).
+
+Gold solutions for SFT are computed on-the-fly with a brute-force solver
+(enumerate all permutations × operator combinations × bracket structures).
 
 Prompt format:
   "Using the numbers [2, 3, 5, 10] and the operations +, -, *, /,
@@ -130,6 +133,59 @@ def _generate_synthetic(n: int, seed: int = 42) -> List[Dict]:
     return problems
 
 
+def _solve_countdown(nums: List[int], target: int) -> Optional[str]:
+    """
+    Brute-force solver: find any arithmetic expression over nums that equals target.
+    Tries all permutations × operator sequences × bracket structures.
+    Returns the expression string, or None if unsolvable.
+    Used to generate gold solutions for SFT training.
+    """
+    ops = ['+', '-', '*', '/']
+
+    def apply(a: float, b: float, op: str) -> Optional[float]:
+        if op == '/' and abs(b) < 1e-9:
+            return None
+        v = {'+':(a+b), '-':(a-b), '*':(a*b), '/':(a/b)}[op]
+        return v
+
+    # For n numbers, build all possible expression trees.
+    # We use a recursive approach: pick two values, combine, recurse.
+    def solve(vals: List[Tuple[float, str]]) -> Optional[str]:
+        if len(vals) == 1:
+            v, expr = vals[0]
+            if abs(v - target) < 1e-6:
+                return expr
+            return None
+        for i in range(len(vals)):
+            for j in range(len(vals)):
+                if i == j:
+                    continue
+                a, ea = vals[i]
+                b, eb = vals[j]
+                rest = [vals[k] for k in range(len(vals)) if k != i and k != j]
+                for op in ops:
+                    r = apply(a, b, op)
+                    if r is None:
+                        continue
+                    # Build expression string with parens to be unambiguous
+                    if op in ('*', '/'):
+                        new_expr = f"({ea} {op} {eb})"
+                    else:
+                        new_expr = f"({ea} {op} {eb})"
+                    result = solve(rest + [(r, new_expr)])
+                    if result is not None:
+                        return result
+        return None
+
+    for perm in permutations(nums):
+        vals = [(float(n), str(n)) for n in perm]
+        result = solve(vals)
+        if result is not None:
+            # Strip outermost parens for cleanliness
+            return result.strip('()')
+    return None
+
+
 def _format_prompt(sample: Dict) -> str:
     nums_str = ", ".join(str(n) for n in sample["numbers"])
     target = sample["target"]
@@ -217,52 +273,54 @@ class CountdownTask(GenerativeTask):
 
     def _load_hf(self, split: str, max_s: Optional[int]) -> List[Dict]:
         """
-        Load Countdown problems from allenai/tulu-3-sft-mixture.
+        Load Countdown problems from Jiayi-Pan/Countdown-Tasks-3to4.
 
-        tulu-3 has a single "default" config (no "countdown" sub-config).
-        We stream the dataset and filter rows where item["dataset"] == "countdown".
-        All three splits are carved from the filtered items on the first call and
-        cached on the task object so subsequent calls don't re-download.
+        This is a dedicated Countdown benchmark dataset (3–4 numbers, integer targets).
+        Schema: {'nums': [int, ...], 'target': int}  — no gold solution provided.
+        Gold solutions are computed with _solve_countdown() so SFT has training signal.
+
+        All three splits are carved from the dataset on the first call and cached.
         """
         from datasets import load_dataset
 
         if not hasattr(self, "_hf_cache"):
-            # How many countdown samples to collect before stopping the stream.
-            # Grab enough for all three splits plus a safety margin.
             n_target = (
                 (self._max_train or 1000)
                 + (self._max_val or 200)
                 + (self._max_test or 500)
-                + 200  # margin
+                + 200
             )
             logger.info(
-                f"  Streaming allenai/tulu-3-sft-mixture (default config, "
-                f"filtering 'countdown' items, want ≥{n_target})…"
+                f"  Loading Jiayi-Pan/Countdown-Tasks-3to4 "
+                f"(want ≥{n_target} solved problems)…"
             )
             ds = load_dataset(
-                "allenai/tulu-3-sft-mixture",
+                "Jiayi-Pan/Countdown-Tasks-3to4",
                 split="train",
                 streaming=True,
-                trust_remote_code=True,
             )
 
             all_samples: List[Dict] = []
+            n_unsolvable = 0
             for item in ds:
-                # The 'dataset' column identifies the source task
-                src = (item.get("dataset") or item.get("source") or "").lower()
-                if "countdown" not in src:
-                    continue
-                parsed = self._parse_tulu_item(item)
-                if parsed:
-                    all_samples.append(parsed)
+                nums   = [int(x) for x in item["nums"]]
+                target = int(item["target"])
+                sol = _solve_countdown(nums, target)
+                if sol is None:
+                    n_unsolvable += 1
+                    continue  # skip problems our solver can't crack
+                sample = {"numbers": nums, "target": target, "solution": sol}
+                sample["prompt"] = _format_prompt(sample)
+                all_samples.append(sample)
                 if len(all_samples) >= n_target:
                     break
 
+            logger.info(
+                f"  Loaded {len(all_samples)} solvable problems "
+                f"({n_unsolvable} skipped as unsolvable by brute-force solver)."
+            )
             if not all_samples:
-                raise RuntimeError(
-                    "No countdown items found in allenai/tulu-3-sft-mixture. "
-                    "Check the 'dataset' column name in the HF hub card."
-                )
+                raise RuntimeError("No solvable countdown problems found.")
 
             # Deterministic train / val / test split
             rng = random.Random(self._seed)
@@ -276,7 +334,7 @@ class CountdownTask(GenerativeTask):
                 "test":  all_samples[n_val: n_val + n_test],
             }
             logger.info(
-                f"  HF cache built: train={len(self._hf_cache['train'])}, "
+                f"  HF cache: train={len(self._hf_cache['train'])}, "
                 f"val={len(self._hf_cache['val'])}, test={len(self._hf_cache['test'])}"
             )
 
@@ -285,35 +343,6 @@ class CountdownTask(GenerativeTask):
             chosen = chosen[:max_s]
         logger.info(f"  {len(chosen)} samples selected for {split} split.")
         return chosen
-
-    def _parse_tulu_item(self, item: Dict) -> Optional[Dict]:
-        """Parse a tulu-3-sft-mixture countdown item into our format."""
-        try:
-            messages = item.get("messages", [])
-            user_msg = next((m["content"] for m in messages if m["role"] == "user"), None)
-            assistant_msg = next((m["content"] for m in messages if m["role"] == "assistant"), None)
-            if not user_msg:
-                return None
-
-            # Extract numbers and target from user message
-            # Format: "Use numbers X, Y, Z and +,-,*,/ to reach T"
-            nums_match = re.findall(r'\d+', user_msg)
-            if len(nums_match) < 3:
-                return None
-
-            # Last number is target, rest are the given numbers
-            nums = [int(x) for x in nums_match[:-1]]
-            target = int(nums_match[-1])
-
-            sample = {
-                "numbers": nums,
-                "target": target,
-                "solution": assistant_msg or "",
-            }
-            sample["prompt"] = _format_prompt(sample)
-            return sample
-        except Exception:
-            return None
 
     def format_prompt(self, sample: Dict) -> str:
         return _format_prompt(sample)
