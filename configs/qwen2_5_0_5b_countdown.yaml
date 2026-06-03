@@ -5,12 +5,12 @@ model: qwen2_5_0_5b
 task: countdown
 
 task_config:
-  max_train_samples: 500         # paper uses full train; keep small for speed
+  max_train_samples: 500
   max_val_samples: 200
   max_test_samples: 500
-  batch_size: 8
+  batch_size: 32        # 0.5B fp16 ~1 GB + KV cache → fits 24 GB at bs=32
   num_workers: 0
-  use_synthetic: false           # try HuggingFace first, fall back to synthetic
+  use_synthetic: false
 
 methods:
   - passatone        # greedy decode, base model — minimum baseline

@@ -9,7 +9,7 @@ task_config:
   max_train_samples: 500
   max_val_samples: 200
   max_test_samples: 500
-  batch_size: 8
+  batch_size: 12        # 3B fp16 ~6 GB + KV cache ~6 GB → fits 24 GB at bs=12
   num_workers: 0
   use_synthetic: false
 
