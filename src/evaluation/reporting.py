@@ -22,16 +22,35 @@ logger = logging.getLogger(__name__)
 # ── Consistent style ────────────────────────────────────────────────────────
 
 METHOD_COLORS = {
-    "linear_probe": "#5B9BD5",
-    "finetune":     "#ED7D31",
-    "randopt":      "#70AD47",
+    "linear_probe":  "#5B9BD5",
+    "finetune":      "#ED7D31",
+    "passatone":     "#9E9E9E",
+    "majority_vote": "#FF9800",
+    "sft":           "#E91E63",
+    "randopt":       "#70AD47",
 }
-METHOD_ORDER = ["linear_probe", "finetune", "randopt"]
+METHOD_ORDER = ["linear_probe", "finetune", "passatone", "majority_vote", "sft", "randopt"]
 METHOD_DISPLAY = {
-    "linear_probe": "Linear Probe",
-    "finetune":     "Fine-Tuning",
-    "randopt":      "RandOpt",
+    "linear_probe":  "Linear Probe",
+    "finetune":      "Fine-Tuning",
+    "passatone":     "Pass@1",
+    "majority_vote": "Majority Vote",
+    "sft":           "SFT",
+    "randopt":       "RandOpt",
 }
+
+
+def _fmt_time(seconds: float) -> str:
+    """Format a duration in seconds as a human-readable string."""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    elif seconds < 3600:
+        m, s = divmod(int(seconds), 60)
+        return f"{m}m {s:02d}s"
+    else:
+        h, rem = divmod(int(seconds), 3600)
+        m = rem // 60
+        return f"{h}h {m:02d}m"
 
 
 def results_to_dataframe(results: List[EvalResult]) -> pd.DataFrame:
@@ -85,6 +104,22 @@ def print_comparison_table(results: List[EvalResult], output_dir: Path = None):
     print(tabulate(display_df, headers="keys", tablefmt="rounded_outline",
                    floatfmt=".4f", showindex=False))
     print()
+
+    # ── Timing table ──
+    time_rows = []
+    for r in results:
+        adapt = r.extra.get("adapt_time_sec", 0)
+        evalt = r.extra.get("eval_time_sec", 0)
+        time_rows.append({
+            "Method": METHOD_DISPLAY.get(r.method_name, r.method_name),
+            "Adapt": _fmt_time(adapt),
+            "Eval": _fmt_time(evalt),
+            "Total": _fmt_time(adapt + evalt),
+        })
+    if time_rows:
+        print("\n  Timing:")
+        print(tabulate(time_rows, headers="keys", tablefmt="simple", showindex=False))
+        print()
 
     if output_dir:
         output_dir = Path(output_dir)

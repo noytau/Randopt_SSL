@@ -342,6 +342,7 @@ def main():
             log_dict = {f"{method_name}/{k}": v for k, v in test_metrics.items()}
             log_dict[f"{method_name}/adapt_time_sec"] = adapt_time
             log_dict[f"{method_name}/eval_time_sec"] = eval_time
+            log_dict[f"{method_name}/total_time_sec"] = adapt_time + eval_time
             wandb.log(log_dict)
 
         # Restore pretrained weights after each method
