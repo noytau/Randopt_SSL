@@ -347,6 +347,10 @@ def main():
         # Restore pretrained weights after each method
         model.get_encoder().load_state_dict(pretrained_state, strict=False)
 
+        # Free fragmented CUDA cache between methods to prevent OOM on large models
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+
     # ── Report ──
     logger.info(f"\n[4/4] Generating reports...")
     print_comparison_table(results, output_dir)

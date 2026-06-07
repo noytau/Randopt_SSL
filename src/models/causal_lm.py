@@ -66,9 +66,12 @@ class CausalLMModel(SSLModel):
         self._model.eval()
         self._device = device
 
-        # Store immutable copy of pretrained weights
+        # Store immutable copy of pretrained weights on CPU.
+        # Keeping it on GPU doubles VRAM usage (e.g. 3B FP16 = 6 GB model + 6 GB copy)
+        # which causes OOM during evaluation once the KV cache grows.
+        # load_state_dict() handles the CPU→GPU transfer automatically when restoring.
         self._pretrained_state = {
-            k: v.clone().to(device) for k, v in self._model.state_dict().items()
+            k: v.detach().cpu() for k, v in self._model.state_dict().items()
         }
         n_params = sum(p.numel() for p in self._model.parameters()) / 1e6
         logger.info(f"  Loaded {self._model_id}. Parameters: {n_params:.1f}M")
