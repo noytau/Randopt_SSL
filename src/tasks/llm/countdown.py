@@ -197,9 +197,9 @@ def _format_prompt(sample: Dict) -> str:
     target = sample["target"]
     return (
         f"Using the numbers [{nums_str}] and the operations +, -, *, /, "
-        f"write an arithmetic expression that equals {target}. "
+        f"create an arithmetic expression that equals {target}. "
         f"Each number may be used at most once. "
-        f"Output only the expression, nothing else."
+        f"Think step by step, then give your final answer as a single arithmetic expression."
     )
 
 
@@ -360,39 +360,32 @@ class CountdownTask(GenerativeTask):
 
     def verify(self, response: str, sample: Dict) -> bool:
         """
-        Parse the model's response as an arithmetic expression and check it equals target.
-        Gracefully handles extra text, newlines, markdown code blocks.
+        Parse the model's response and check if it contains an arithmetic expression
+        that equals the target. Handles chain-of-thought output: scans every line,
+        tries to extract and evaluate any arithmetic expression.
         """
         target = sample["target"]
-        numbers_allowed = list(sample["numbers"])  # copy
 
-        # Strip markdown / explanatory text — take the first line that looks like an expression
+        # Split on newlines and common delimiters like "Answer:", "="
         lines = response.strip().split('\n')
+        candidates = []
         for line in lines:
-            line = line.strip().strip('`').strip()
-            # Basic sanity: must contain digits and operators
-            if not re.search(r'\d', line):
-                continue
-            if not re.search(r'[+\-*/]', line):
-                continue
+            line = line.strip()
+            # Strip markdown code fences and backticks
+            line = line.strip('`').strip()
+            # Strip leading labels like "Answer:", "Expression:", "Result:"
+            line = re.sub(r'^[A-Za-z ]+:\s*', '', line)
+            # Strip trailing "= <number>" so "2*(10-3)+5 = 19" → "2*(10-3)+5"
+            line = re.sub(r'\s*=\s*[-\d.]+\s*$', '', line).strip()
+            candidates.append(line)
 
-            result = _safe_eval(line)
-            if result is None:
+        for expr in candidates:
+            if not re.search(r'\d', expr):
                 continue
-
-            # Check numeric equality (allow float tolerance for integer results)
-            if abs(result - target) < 1e-6:
-                # Optional: check each number is used at most once
-                used_nums = [int(x) for x in re.findall(r'\d+', line)]
-                allowed_copy = list(numbers_allowed)
-                valid = True
-                for n in used_nums:
-                    if n in allowed_copy:
-                        allowed_copy.remove(n)
-                    else:
-                        # Number used that wasn't in the set — still count if result is correct
-                        # (lenient verification, matches paper's approach)
-                        pass
+            if not re.search(r'[+\-*/]', expr):
+                continue
+            result = _safe_eval(expr)
+            if result is not None and abs(result - target) < 1e-6:
                 return True
 
         return False

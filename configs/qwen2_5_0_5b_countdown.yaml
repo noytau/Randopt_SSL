@@ -25,7 +25,7 @@ top_k: 50
 n_rounds: 1
 
 # Generation params
-max_new_tokens: 64               # Countdown answers are short expressions
+max_new_tokens: 512
 
 seed: 42
 device: auto

@@ -110,8 +110,13 @@ class CausalLMModel(SSLModel):
         """
         Run autoregressive generation on a list of prompt strings.
 
+        Applies the model's chat template (system + user message) so that
+        Instruct-tuned models receive input in the expected conversation format.
+        Without this, Instruct models output garbage (they were fine-tuned on
+        <|im_start|>user...<|im_end|>assistant format, not raw text).
+
         Args:
-            prompts: list of raw text prompts (already formatted).
+            prompts: list of task prompts (user turn only — system prompt is added here).
             max_new_tokens: max tokens to generate per prompt.
             temperature: sampling temperature (0.0 = greedy).
             do_sample: if True, sample; else greedy.
@@ -122,8 +127,23 @@ class CausalLMModel(SSLModel):
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
+        # Apply chat template: wrap each prompt as a user message.
+        # add_generation_prompt=True appends <|im_start|>assistant\n so the
+        # model generates the assistant turn rather than continuing the user text.
+        formatted = []
+        for p in prompts:
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": p},
+            ]
+            formatted.append(
+                self._tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            )
+
         encoded = self._tokenizer(
-            prompts,
+            formatted,
             return_tensors="pt",
             padding=True,
             truncation=True,

@@ -24,7 +24,7 @@ n_candidates: 3000
 top_k: 50
 n_rounds: 1
 
-max_new_tokens: 64
+max_new_tokens: 512
 
 seed: 42
 device: auto
