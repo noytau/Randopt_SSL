@@ -71,8 +71,18 @@ class PerturbationSampler:
     def apply(
         self, reference_state: Dict[str, torch.Tensor], epsilon: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
-        """M' = M + epsilon"""
-        return {k: reference_state[k] + epsilon[k] for k in reference_state}
+        """M' = M + epsilon.
+
+        reference_state may be on CPU (to save VRAM) while epsilon is on GPU.
+        We move each reference tensor to the epsilon device before adding so
+        the perturbed weights land on GPU ready for load_state_dict().
+        Peak extra VRAM: one model-sized tensor (epsilon) + one model-sized
+        tensor (result) — the .to() intermediate is freed after each step.
+        """
+        return {
+            k: reference_state[k].to(epsilon[k].device) + epsilon[k]
+            for k in reference_state
+        }
 
 
 @register_method("randopt")
