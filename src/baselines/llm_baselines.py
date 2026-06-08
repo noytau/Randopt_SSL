@@ -84,6 +84,11 @@ class MajorityVoteWrapper(nn.Module):
                 **kwargs,
             )
             per_run.append(responses)
+            # Free fragmented CUDA cache after each sample.
+            # Over 50 samples × 17 test batches = 850 generate() calls, KV-cache
+            # fragments can accumulate and trigger OOM on the next tiny allocation
+            # even when total free memory looks sufficient.
+            torch.cuda.empty_cache()
 
         # Majority vote per prompt
         results = []

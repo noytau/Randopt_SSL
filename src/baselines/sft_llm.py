@@ -103,7 +103,17 @@ class SupervisedFineTune(AdaptationMethod):
         training_dtype = next(lm.parameters()).dtype
 
         # ── Optimizer ──
-        optimizer = torch.optim.AdamW(lm.parameters(), lr=lr, weight_decay=0.01)
+        # 3B BF16 model: AdamW stores exp_avg + exp_avg_sq → 2 × 6.2 GB = 12.4 GB optimizer states.
+        # Model(6.2) + states(12.4) + grads(6.2) = 24.8 GB → OOM on A5000 (24 GB).
+        # bitsandbytes 8-bit AdamW quantizes optimizer states to int8 → ~1/4 the footprint:
+        # Model(6.2) + states(3.1) + grads(6.2) = 15.5 GB → 8.5 GB headroom.
+        try:
+            import bitsandbytes as bnb
+            optimizer = bnb.optim.AdamW8bit(lm.parameters(), lr=lr, weight_decay=0.01)
+            logger.info("  Optimizer: AdamW 8-bit (bitsandbytes) — saves ~9 GB VRAM on large models.")
+        except ImportError:
+            optimizer = torch.optim.AdamW(lm.parameters(), lr=lr, weight_decay=0.01)
+            logger.info("  Optimizer: AdamW FP32 (bitsandbytes not available — may OOM on 3B+).")
 
         # GradScaler only makes sense with FP32 parameters + FP16 compute.
         # For BF16 / FP16 parameters we skip it — BF16 can't overflow and
